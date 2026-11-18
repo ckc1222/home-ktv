@@ -1,0 +1,1107 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>📺 家庭 KTV 電視播放端 (Google TV / Mac 大螢幕)</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #05060a;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", sans-serif;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+    }
+    #videoPlayer {
+      width: 100vw;
+      height: 100vh;
+      object-fit: contain;
+      background: #000;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 3;
+    }
+    #ytIframeContainer {
+      width: 100vw;
+      height: 100vh;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 2;
+      background: #000;
+    }
+    #ytIframeContainer iframe {
+      width: 100vw;
+      height: 100vh;
+      border: none;
+    }
+    .hidden { display: none !important; }
+    .invisible { visibility: hidden; pointer-events: none; }
+
+    /* 待機歡迎畫面 */
+    #idleScreen {
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+      background: radial-gradient(circle at center, #261042 0%, #070810 70%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 32px;
+    }
+    .idle-title {
+      font-size: 3.4rem;
+      font-weight: 900;
+      background: linear-gradient(90deg, #ff2e93, #00e5ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 14px;
+    }
+    .idle-sub {
+      font-size: 1.35rem;
+      color: #c3cbe0;
+      margin-bottom: 28px;
+    }
+
+    /* 解鎖 Chrome 自動播放聲音按鈕 */
+    #unlockAudioBtn {
+      position: absolute;
+      bottom: 36px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 50;
+      background: linear-gradient(135deg, #ff2e93, #ff6b00);
+      color: #fff;
+      border: 2px solid #fff;
+      padding: 16px 34px;
+      border-radius: 999px;
+      font-size: 1.25rem;
+      font-weight: 900;
+      cursor: pointer;
+      box-shadow: 0 10px 35px rgba(255, 46, 147, 0.75);
+      animation: pulseBtn 1.5s infinite ease-in-out;
+    }
+    @keyframes pulseBtn {
+      0%, 100% { transform: translateX(-50%) scale(1); }
+      50% { transform: translateX(-50%) scale(1.06); }
+    }
+
+    /* 頂部 KTV 包廂狀態列 */
+    .osd-top {
+      position: absolute;
+      top: 20px;
+      left: 28px;
+      right: 28px;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      pointer-events: none;
+    }
+    .osd-pill {
+      background: rgba(10, 12, 20, 0.78);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      padding: 10px 20px;
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-size: 0.98rem;
+      font-weight: 700;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+    }
+    .status-badge {
+      padding: 4px 12px;
+      border-radius: 99px;
+      font-size: 0.85rem;
+      background: rgba(255, 46, 147, 0.25);
+      border: 1px solid #ff2e93;
+      color: #ff9ec9;
+    }
+
+    /* 左下角 KTV 麥克風混音面板 */
+    .mic-card {
+      position: absolute;
+      bottom: 24px;
+      left: 24px;
+      z-index: 35;
+      background: rgba(12, 15, 26, 0.88);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 46, 147, 0.4);
+      border-radius: 18px;
+      padding: 14px 16px;
+      width: 320px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.65);
+      transition: all 0.2s ease;
+    }
+    .mic-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .mic-toggle-btn {
+      flex: 1;
+      padding: 10px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 46, 147, 0.5);
+      background: rgba(255, 46, 147, 0.18);
+      color: #fff;
+      font-weight: 800;
+      font-size: 0.92rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .mic-toggle-btn.active {
+      background: linear-gradient(135deg, #ff2e93, #9c27b0);
+      border-color: #fff;
+      box-shadow: 0 0 18px rgba(255, 46, 147, 0.65);
+    }
+    .mic-expand-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #c3cbe0;
+      border-radius: 10px;
+      padding: 8px 10px;
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+    .meter-wrap {
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 99px;
+      overflow: hidden;
+      margin-top: 10px;
+    }
+    .meter-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #10b981, #00e5ff, #ff2e93);
+      transition: width 0.06s linear;
+    }
+    .mic-details {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      font-size: 0.8rem;
+    }
+    .slider-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .slider-row input[type="range"] {
+      flex: 1;
+      accent-color: #ff2e93;
+    }
+    .device-select {
+      width: 100%;
+      background: #181d2c;
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      padding: 6px 8px;
+      border-radius: 8px;
+      font-size: 0.78rem;
+    }
+
+    /* 右下角手機掃碼點歌 QR Code */
+    .qr-card {
+      position: absolute;
+      bottom: 24px;
+      right: 24px;
+      z-index: 25;
+      background: rgba(12, 15, 26, 0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(0, 229, 255, 0.35);
+      border-radius: 18px;
+      padding: 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+    }
+    .qr-card img {
+      width: 84px;
+      height: 84px;
+      border-radius: 8px;
+      background: #fff;
+      padding: 4px;
+    }
+    .qr-text {
+      font-size: 0.85rem;
+      line-height: 1.45;
+    }
+    .qr-url {
+      color: #00e5ff;
+      font-weight: 800;
+      font-size: 0.92rem;
+    }
+
+    /* 彈幕與特效層 */
+    #fxLayer {
+      position: absolute;
+      inset: 0;
+      z-index: 30;
+      pointer-events: none;
+      overflow: hidden;
+    }
+    .barrage-item {
+      position: absolute;
+      white-space: nowrap;
+      font-size: 2.2rem;
+      font-weight: 900;
+      color: #fff;
+      text-shadow: 0 0 12px #ff2e93, 2px 2px 4px #000;
+      animation: flyLeft 8s linear forwards;
+    }
+    @keyframes flyLeft {
+      from { transform: translateX(105vw); }
+      to { transform: translateX(-120%); }
+    }
+    .reaction-burst {
+      position: absolute;
+      bottom: 15%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255, 46, 147, 0.9);
+      border: 2px solid #fff;
+      padding: 16px 36px;
+      border-radius: 999px;
+      font-size: 2rem;
+      font-weight: 900;
+      box-shadow: 0 0 40px rgba(255, 46, 147, 0.8);
+      animation: popUp 2.6s ease-out forwards;
+    }
+    @keyframes popUp {
+      0% { opacity: 0; transform: translate(-50%, 40px) scale(0.7); }
+      15% { opacity: 1; transform: translate(-50%, 0) scale(1.06); }
+      80% { opacity: 1; transform: translate(-50%, -15px) scale(1); }
+      100% { opacity: 0; transform: translate(-50%, -45px) scale(0.9); }
+    }
+
+    #centerToast {
+      position: absolute;
+      top: 90px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 40;
+      background: rgba(0, 229, 255, 0.92);
+      color: #05060a;
+      font-weight: 900;
+      font-size: 1.3rem;
+      padding: 10px 28px;
+      border-radius: 99px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <!-- 頂部包廂跑馬燈 -->
+  <div class="osd-top">
+    <div class="osd-pill">
+      <span id="osdNow">🎤 等待點歌中...</span>
+      <span style="color:#8b95b0;">|</span>
+      <span id="osdNext" style="color:#00e5ff;">下一首：尚無待播歌曲</span>
+    </div>
+    <div class="osd-pill">
+      <span class="status-badge" id="osdEngine" style="border-color:#10b981; color:#a7f3d0; background:rgba(16,185,129,0.2);">⚡ 準備就緒</span>
+      <span class="status-badge" id="osdVocal">🎵 原唱模式</span>
+      <span class="status-badge" id="osdPitch" style="border-color:#00e5ff; color:#9ef7ff; background:rgba(0,229,255,0.2);">🎼 原調 (0)</span>
+    </div>
+  </div>
+
+  <!-- 待機歡迎畫面 -->
+  <div id="idleScreen">
+    <div class="idle-title">🎉 家庭 KTV 歡唱包廂</div>
+    <div class="idle-sub">請用 iPad 或 iPhone 掃描右下角 QR Code 立即點唱 YouTube 歌曲！</div>
+    <div style="font-size:1rem; color:#8b95b0;">（支援麥克風 KTV 迴音混音、原唱/伴唱消人聲、即時升降 Key、包廂互動彈幕）</div>
+  </div>
+
+  <!-- 解鎖自動播放聲音按鈕 -->
+  <button id="unlockAudioBtn" onclick="unlockAudio()">🔊 點擊此處開啟電視聲音（首次開啟必點）</button>
+
+  <!-- HTML5 Video (支援 WebAudio 即時消人聲與升降 Key) -->
+  <video id="videoPlayer" playsinline crossorigin="anonymous" class="hidden"></video>
+
+  <!-- 即時秒播 YouTube IFrame 播放器 -->
+  <div id="ytIframeContainer" class="invisible">
+    <div id="ytIframe"></div>
+  </div>
+
+  <!-- 特效與彈幕層 -->
+  <div id="fxLayer"></div>
+  <div id="centerToast"></div>
+
+  <!-- 左下角 KTV 麥克風混音面板 -->
+  <div class="mic-card">
+    <div class="mic-header">
+      <button class="mic-toggle-btn" id="micToggleBtn" onclick="toggleMic()">
+        🎙️ 點此開啟麥克風歡唱
+      </button>
+      <button class="mic-expand-btn" onclick="toggleMicPanel()">調音 ⚙️</button>
+    </div>
+    <div class="meter-wrap" title="麥克風收音音量">
+      <div class="meter-fill" id="micMeterFill"></div>
+    </div>
+
+    <div class="mic-details" id="micDetailsPanel">
+      <select id="micDeviceSelect" class="device-select" onchange="restartMicStream()">
+        <option value="">🎙️ 預設麥克風 (Mac / AirPods)</option>
+      </select>
+
+      <div class="slider-row">
+        <span style="width:78px;">🎙️ 人聲音量</span>
+        <input type="range" id="micVolSlider" min="0" max="200" value="100" oninput="onLocalMicParamChange()" />
+        <span id="micVolLabel" style="width:38px; text-align:right;">100%</span>
+      </div>
+
+      <div class="slider-row">
+        <span style="width:78px;">✨ KTV 迴音</span>
+        <input type="range" id="reverbSlider" min="0" max="100" value="45" oninput="onLocalMicParamChange()" />
+        <span id="reverbLabel" style="width:38px; text-align:right;">45%</span>
+      </div>
+
+      <div class="slider-row">
+        <span style="width:78px;">🎵 伴奏音量</span>
+        <input type="range" id="musicVolSlider" min="0" max="100" value="85" oninput="onLocalMicParamChange()" />
+        <span id="musicVolLabel" style="width:38px; text-align:right;">85%</span>
+      </div>
+
+      <label style="display:flex; align-items:center; gap:6px; color:#9ca3af; cursor:pointer; margin-top:2px;">
+        <input type="checkbox" id="antiHowlCheck" onchange="onAntiHowlChange()" />
+        🛡️ 防筆電喇叭回授嘯叫（未戴耳機外放時勾選）
+      </label>
+    </div>
+  </div>
+
+  <!-- 右下角掃碼點歌 -->
+  <div class="qr-card">
+    <img id="qrImg" alt="Scan to Order Songs" />
+    <div class="qr-text">
+      <div>📱 <strong>手機 / iPad 掃碼點歌</strong></div>
+      <div style="color:#9ca3af; font-size:0.76rem;">連上同一個 Wi-Fi 即可點歌</div>
+      <div class="qr-url" id="qrUrlText">載入中...</div>
+    </div>
+  </div>
+
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script>
+    let ws;
+    let currentVideoId = null;
+    let roomState = {
+      mic_enabled: false,
+      mic_volume: 100,
+      reverb_level: 45,
+      volume: 85,
+      anti_howl: false
+    };
+    let ytPlayer = null;
+    let ytPlayerReady = false;
+    let pendingIframeVideoId = null;
+    let activeEngine = 'none'; // 'dsp' or 'iframe'
+    let audioUnlocked = false;
+
+    // WebAudio 伴奏音訊節點
+    let audioCtx = null;
+    let sourceNode = null;
+    let dryGain = null;
+    let vocalCutGain = null;
+    let musicMasterGain = null;
+    let currentPitchRatio = 1.0;
+
+    // WebAudio KTV 麥克風與混響節點
+    let micStream = null;
+    let micSourceNode = null;
+    let micDryGain = null;
+    let micWetGain = null;
+    let micMasterGain = null;
+    let micAnalyser = null;
+    let meterAnimId = null;
+
+    const videoEl = document.getElementById('videoPlayer');
+
+    function unlockAudio() {
+      audioUnlocked = true;
+      document.getElementById('unlockAudioBtn').classList.add('hidden');
+      initWebAudio();
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      videoEl.muted = false;
+      if (activeEngine === 'dsp' && videoEl.paused && currentVideoId) {
+        videoEl.play().catch(() => {});
+      }
+      if (activeEngine === 'iframe' && ytPlayer && ytPlayerReady) {
+        ytPlayer.unMute();
+        ytPlayer.setVolume(roomState.volume ?? 85);
+        ytPlayer.playVideo();
+      }
+    }
+
+    // 合成 KTV 豪華立體聲包廂混響脈衝響應 (Stereo Hall Impulse Response)
+    function createKtvReverbImpulse(ctx, duration = 2.2, decay = 2.4) {
+      const rate = ctx.sampleRate;
+      const length = Math.floor(rate * duration);
+      const impulse = ctx.createBuffer(2, length, rate);
+      const left = impulse.getChannelData(0);
+      const right = impulse.getChannelData(1);
+      for (let i = 0; i < length; i++) {
+        const env = Math.pow(1 - i / length, decay);
+        left[i] = (Math.random() * 2 - 1) * env;
+        right[i] = (Math.random() * 2 - 1) * env;
+      }
+      return impulse;
+    }
+
+    function initWebAudio() {
+      if (audioCtx) return;
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AudioContextClass({ latencyHint: 'interactive' });
+      sourceNode = audioCtx.createMediaElementSource(videoEl);
+
+      // 1. 原唱立體聲通道 (Dry)
+      dryGain = audioCtx.createGain();
+      dryGain.gain.value = 1.0;
+
+      // 2. 伴唱消人聲通道 (Vocal Canceller: L - R 相位抵銷 + 140Hz 以下低音保留)
+      vocalCutGain = audioCtx.createGain();
+      vocalCutGain.gain.value = 0.0;
+
+      const splitter = audioCtx.createChannelSplitter(2);
+      const invertRight = audioCtx.createGain();
+      invertRight.gain.value = -1.0;
+
+      const diffMix = audioCtx.createGain();
+      diffMix.gain.value = 1.15;
+
+      const bassFilter = audioCtx.createBiquadFilter();
+      bassFilter.type = 'lowpass';
+      bassFilter.frequency.value = 140;
+      const bassGain = audioCtx.createGain();
+      bassGain.gain.value = 1.25;
+
+      sourceNode.connect(splitter);
+      splitter.connect(diffMix, 0);
+      splitter.connect(invertRight, 1);
+      invertRight.connect(diffMix);
+
+      sourceNode.connect(bassFilter);
+      bassFilter.connect(bassGain);
+
+      diffMix.connect(vocalCutGain);
+      bassGain.connect(vocalCutGain);
+
+      sourceNode.connect(dryGain);
+
+      // 3. 即時升降 Key 處理器 + 伴奏主音量
+      const pitchProcessor = createPitchShifterNode(audioCtx);
+      musicMasterGain = audioCtx.createGain();
+      musicMasterGain.gain.value = 0.85;
+
+      dryGain.connect(pitchProcessor);
+      vocalCutGain.connect(pitchProcessor);
+      pitchProcessor.connect(musicMasterGain);
+      musicMasterGain.connect(audioCtx.destination);
+
+      // 4. 初始化 KTV 麥克風效果器鏈 (Highpass -> Presence EQ -> Compressor -> Dry + Hall Reverb)
+      initMicEffectChain();
+    }
+
+    function initMicEffectChain() {
+      micDryGain = audioCtx.createGain();
+      micWetGain = audioCtx.createGain();
+      micMasterGain = audioCtx.createGain();
+      micAnalyser = audioCtx.createAnalyser();
+      micAnalyser.fftSize = 256;
+
+      // KTV 25ms Pre-Delay + 3kHz 溫暖高頻衰減 + 立體聲大廳混響
+      const preDelay = audioCtx.createDelay(0.1);
+      preDelay.delayTime.value = 0.025;
+
+      const reverbTone = audioCtx.createBiquadFilter();
+      reverbTone.type = 'lowpass';
+      reverbTone.frequency.value = 3200;
+
+      const convolver = audioCtx.createConvolver();
+      convolver.buffer = createKtvReverbImpulse(audioCtx, 2.2, 2.5);
+
+      preDelay.connect(reverbTone);
+      reverbTone.connect(convolver);
+      convolver.connect(micWetGain);
+
+      micDryGain.connect(micMasterGain);
+      micWetGain.connect(micMasterGain);
+      micMasterGain.connect(audioCtx.destination);
+
+      // 將 Pre-Delay 掛在 audioCtx 上供麥克風串流連接
+      audioCtx._ktvPreDelay = preDelay;
+      updateMicDSP();
+    }
+
+    async function refreshMicDevices() {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const audioInputs = devices.filter((d) => d.kind === 'audioinput');
+        const sel = document.getElementById('micDeviceSelect');
+        const currentVal = sel.value;
+        sel.innerHTML = audioInputs
+          .map((d, idx) => `<option value="${d.deviceId}">🎙️ ${d.label || '麥克風 ' + (idx + 1)}</option>`)
+          .join('');
+        if (currentVal && audioInputs.some((d) => d.deviceId === currentVal)) {
+          sel.value = currentVal;
+        }
+      } catch (e) {}
+    }
+
+    async function startMicrophone() {
+      unlockAudio();
+      initWebAudio();
+
+      try {
+        if (micStream) {
+          micStream.getTracks().forEach((t) => t.stop());
+        }
+        const selectedDeviceId = document.getElementById('micDeviceSelect').value;
+        const antiHowl = document.getElementById('antiHowlCheck').checked;
+
+        micStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
+            echoCancellation: antiHowl,
+            noiseSuppression: true,
+            autoGainControl: false,
+            latency: 0.005
+          }
+        });
+
+        await refreshMicDevices();
+
+        if (micSourceNode) {
+          try { micSourceNode.disconnect(); } catch (e) {}
+        }
+
+        micSourceNode = audioCtx.createMediaStreamSource(micStream);
+
+        // 1. 濾除 85Hz 以下噴麥與低頻轟鳴
+        const hpFilter = audioCtx.createBiquadFilter();
+        hpFilter.type = 'highpass';
+        hpFilter.frequency.value = 85;
+
+        // 2. KTV 人聲穿透力美化 EQ (+3.5dB @ 3.2kHz)
+        const presenceEq = audioCtx.createBiquadFilter();
+        presenceEq.type = 'peaking';
+        presenceEq.frequency.value = 3200;
+        presenceEq.Q.value = 1.0;
+        presenceEq.gain.value = 3.5;
+
+        // 3. 人聲動態壓縮器（防高音爆音、提升小聲細節）
+        const compressor = audioCtx.createDynamicsCompressor();
+        compressor.threshold.value = -20;
+        compressor.knee.value = 18;
+        compressor.ratio.value = 3.5;
+        compressor.attack.value = 0.003;
+        compressor.release.value = 0.15;
+
+        micSourceNode.connect(hpFilter);
+        hpFilter.connect(presenceEq);
+        presenceEq.connect(compressor);
+
+        compressor.connect(micAnalyser);
+        compressor.connect(micDryGain);
+        compressor.connect(audioCtx._ktvPreDelay);
+
+        roomState.mic_enabled = true;
+        updateMicUI();
+        updateMicDSP();
+        startMicMeterLoop();
+        sendMicStateToServer('🎙️ 麥克風 KTV 迴音已開啟！直接對著麥克風開唱吧！');
+      } catch (err) {
+        alert('無法開啟麥克風，請確認 Chrome 已允許麥克風權限：' + err.message);
+      }
+    }
+
+    function stopMicrophone(notify = true) {
+      if (micStream) {
+        micStream.getTracks().forEach((t) => t.stop());
+        micStream = null;
+      }
+      if (micSourceNode) {
+        try { micSourceNode.disconnect(); } catch (e) {}
+        micSourceNode = null;
+      }
+      if (meterAnimId) {
+        cancelAnimationFrame(meterAnimId);
+        meterAnimId = null;
+      }
+      document.getElementById('micMeterFill').style.width = '0%';
+      roomState.mic_enabled = false;
+      updateMicUI();
+      if (notify) {
+        sendMicStateToServer('🔇 麥克風已關閉');
+      }
+    }
+
+    function toggleMic() {
+      if (roomState.mic_enabled && micStream) {
+        stopMicrophone(true);
+      } else {
+        startMicrophone();
+      }
+    }
+
+    function restartMicStream() {
+      if (roomState.mic_enabled) {
+        startMicrophone();
+      }
+    }
+
+    function onAntiHowlChange() {
+      roomState.anti_howl = document.getElementById('antiHowlCheck').checked;
+      if (roomState.mic_enabled) {
+        startMicrophone();
+      } else {
+        sendMicStateToServer();
+      }
+    }
+
+    function onLocalMicParamChange() {
+      roomState.mic_volume = parseInt(document.getElementById('micVolSlider').value, 10);
+      roomState.reverb_level = parseInt(document.getElementById('reverbSlider').value, 10);
+      roomState.volume = parseInt(document.getElementById('musicVolSlider').value, 10);
+      updateMicUI();
+      applyAudioDSP();
+      updateMicDSP();
+      sendMicStateToServer();
+    }
+
+    function sendMicStateToServer(toastText) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        const payload = {
+          action: 'update_mic',
+          mic_enabled: roomState.mic_enabled,
+          mic_volume: roomState.mic_volume,
+          reverb_level: roomState.reverb_level,
+          volume: roomState.volume,
+          anti_howl: roomState.anti_howl
+        };
+        if (toastText) payload.toast = toastText;
+        ws.send(JSON.stringify(payload));
+      }
+    }
+
+    function updateMicDSP() {
+      if (!audioCtx || !micMasterGain) return;
+      const micVol = (roomState.mic_volume ?? 100) / 100;
+      const rev = (roomState.reverb_level ?? 45) / 100;
+      micMasterGain.gain.setTargetAtTime(roomState.mic_enabled ? micVol : 0, audioCtx.currentTime, 0.03);
+      micDryGain.gain.setTargetAtTime(1.0, audioCtx.currentTime, 0.03);
+      micWetGain.gain.setTargetAtTime(rev * 1.4, audioCtx.currentTime, 0.03);
+    }
+
+    function updateMicUI() {
+      const btn = document.getElementById('micToggleBtn');
+      if (roomState.mic_enabled && micStream) {
+        btn.classList.add('active');
+        btn.textContent = '🎙️ 麥克風歡唱中 (點擊關閉)';
+      } else {
+        btn.classList.remove('active');
+        btn.textContent = '🎙️ 點此開啟麥克風歡唱';
+      }
+      document.getElementById('micVolSlider').value = roomState.mic_volume ?? 100;
+      document.getElementById('micVolLabel').textContent = `${roomState.mic_volume ?? 100}%`;
+
+      document.getElementById('reverbSlider').value = roomState.reverb_level ?? 45;
+      document.getElementById('reverbLabel').textContent = `${roomState.reverb_level ?? 45}%`;
+
+      document.getElementById('musicVolSlider').value = roomState.volume ?? 85;
+      document.getElementById('musicVolLabel').textContent = `${roomState.volume ?? 85}%`;
+
+      document.getElementById('antiHowlCheck').checked = !!roomState.anti_howl;
+    }
+
+    function startMicMeterLoop() {
+      if (!micAnalyser) return;
+      const dataArray = new Uint8Array(micAnalyser.frequencyBinCount);
+      const fillEl = document.getElementById('micMeterFill');
+
+      function tick() {
+        if (!roomState.mic_enabled || !micStream) return;
+        micAnalyser.getByteTimeDomainData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          const v = (dataArray[i] - 128) / 128;
+          sum += v * v;
+        }
+        const rms = Math.sqrt(sum / dataArray.length);
+        const pct = Math.min(100, Math.round(rms * 320));
+        fillEl.style.width = `${pct}%`;
+        meterAnimId = requestAnimationFrame(tick);
+      }
+      tick();
+    }
+
+    function toggleMicPanel() {
+      document.getElementById('micDetailsPanel').classList.toggle('hidden');
+    }
+
+    function createPitchShifterNode(ctx) {
+      const bufferSize = 2048;
+      const node = ctx.createScriptProcessor(bufferSize, 2, 2);
+      const delayBufSize = 8192;
+      const bufL = new Float32Array(delayBufSize);
+      const bufR = new Float32Array(delayBufSize);
+      let writeIndex = 0;
+      let phase = 0;
+      const fadeWindow = 2048;
+
+      node.onaudioprocess = (e) => {
+        const inL = e.inputBuffer.getChannelData(0);
+        const inR = e.inputBuffer.getChannelData(1);
+        const outL = e.outputBuffer.getChannelData(0);
+        const outR = e.outputBuffer.getChannelData(1);
+
+        if (Math.abs(currentPitchRatio - 1.0) < 0.001) {
+          outL.set(inL);
+          outR.set(inR);
+          return;
+        }
+
+        const step = 1.0 - currentPitchRatio;
+        for (let i = 0; i < inL.length; i++) {
+          bufL[writeIndex] = inL[i];
+          bufR[writeIndex] = inR[i];
+
+          phase += step;
+          if (phase >= fadeWindow) phase -= fadeWindow;
+          if (phase < 0) phase += fadeWindow;
+
+          const phase2 = (phase + fadeWindow / 2) % fadeWindow;
+          const weight1 = 0.5 * (1 - Math.cos((2 * Math.PI * phase) / fadeWindow));
+          const weight2 = 1.0 - weight1;
+
+          const read1 = (writeIndex - phase + delayBufSize) % delayBufSize;
+          const read2 = (writeIndex - phase2 + delayBufSize) % delayBufSize;
+
+          const idx1 = Math.floor(read1);
+          const idx2 = Math.floor(read2);
+
+          outL[i] = bufL[idx1] * weight1 + bufL[idx2] * weight2;
+          outR[i] = bufR[idx1] * weight1 + bufR[idx2] * weight2;
+
+          writeIndex = (writeIndex + 1) % delayBufSize;
+        }
+      };
+      return node;
+    }
+
+    function applyAudioDSP() {
+      const musVol = (roomState.volume ?? 85) / 100;
+      if (activeEngine === 'iframe' && ytPlayer && ytPlayerReady && ytPlayer.setVolume) {
+        try { ytPlayer.setVolume(roomState.volume ?? 85); } catch (e) {}
+      }
+      if (!audioCtx) return;
+      if (audioUnlocked && audioCtx.state === 'suspended') audioCtx.resume();
+
+      const cut = !!roomState.vocal_cut;
+      dryGain.gain.setTargetAtTime(cut ? 0.0 : 1.0, audioCtx.currentTime, 0.05);
+      vocalCutGain.gain.setTargetAtTime(cut ? 1.0 : 0.0, audioCtx.currentTime, 0.05);
+      if (musicMasterGain) {
+        musicMasterGain.gain.setTargetAtTime(musVol, audioCtx.currentTime, 0.05);
+      }
+
+      const semitones = roomState.pitch_semitones || 0;
+      currentPitchRatio = Math.pow(2, semitones / 12);
+    }
+
+    async function loadRoomInfo() {
+      try {
+        const res = await fetch('/api/info');
+        const info = await res.json();
+        document.getElementById('qrUrlText').textContent = info.controller_url;
+        document.getElementById('qrImg').src =
+          `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(info.controller_url)}`;
+      } catch (e) {}
+    }
+
+    function onYouTubeIframeAPIReady() {
+      ytPlayer = new YT.Player('ytIframe', {
+        width: '100%',
+        height: '100%',
+        playerVars: {
+          autoplay: 1,
+          controls: 1,
+          rel: 0,
+          playsinline: 1,
+          iv_load_policy: 3
+        },
+        events: {
+          onReady: () => {
+            ytPlayerReady = true;
+            if (pendingIframeVideoId) {
+              const vid = pendingIframeVideoId;
+              pendingIframeVideoId = null;
+              startIframePlayback(vid, 0);
+            }
+          },
+          onStateChange: (e) => {
+            if (e.data === YT.PlayerState.ENDED && activeEngine === 'iframe') {
+              ws.send(JSON.stringify({ action: 'next_song' }));
+            }
+          }
+        }
+      });
+    }
+
+    function startDspPlayback(videoId, startSeconds = 0) {
+      activeEngine = 'dsp';
+      document.getElementById('osdEngine').textContent = '🎛️ 無廣告伴奏引擎 (支援消人聲/升降Key)';
+
+      document.getElementById('ytIframeContainer').classList.add('invisible');
+      if (ytPlayer && ytPlayerReady && ytPlayer.stopVideo) {
+        try { ytPlayer.stopVideo(); } catch (e) {}
+      }
+
+      initWebAudio();
+      applyAudioDSP();
+
+      videoEl.classList.remove('hidden');
+      videoEl.src = `/api/stream/${videoId}`;
+      videoEl.currentTime = startSeconds;
+      videoEl.muted = !audioUnlocked;
+      videoEl.play().catch(() => {
+        videoEl.muted = true;
+        document.getElementById('unlockAudioBtn').classList.remove('hidden');
+        videoEl.play().catch(() => {
+          startIframePlayback(videoId, startSeconds);
+        });
+      });
+    }
+
+    function startIframePlayback(videoId, startSeconds = 0) {
+      activeEngine = 'iframe';
+      document.getElementById('osdEngine').textContent = '⚡ YouTube 秒播中 (背景準備伴奏音軌...)';
+
+      videoEl.pause();
+      videoEl.classList.add('hidden');
+      document.getElementById('ytIframeContainer').classList.remove('invisible');
+
+      if (!ytPlayerReady || !ytPlayer || !ytPlayer.loadVideoById) {
+        pendingIframeVideoId = videoId;
+        return;
+      }
+
+      ytPlayer.loadVideoById({ videoId: videoId, startSeconds: startSeconds });
+      if (audioUnlocked) {
+        ytPlayer.unMute();
+        ytPlayer.setVolume(roomState.volume ?? 85);
+      } else {
+        ytPlayer.mute();
+        document.getElementById('unlockAudioBtn').classList.remove('hidden');
+      }
+      ytPlayer.playVideo();
+    }
+
+    function playSong(song) {
+      if (!song || !song.video_id) {
+        currentVideoId = null;
+        activeEngine = 'none';
+        videoEl.pause();
+        videoEl.classList.add('hidden');
+        document.getElementById('ytIframeContainer').classList.add('invisible');
+        if (ytPlayer && ytPlayerReady && ytPlayer.stopVideo) {
+          try { ytPlayer.stopVideo(); } catch (e) {}
+        }
+        document.getElementById('idleScreen').classList.remove('hidden');
+        return;
+      }
+
+      document.getElementById('idleScreen').classList.add('hidden');
+
+      if (song.video_id === currentVideoId) {
+        if (song.cached && activeEngine === 'iframe') {
+          let curSec = 0;
+          try {
+            if (ytPlayer && ytPlayerReady && ytPlayer.getCurrentTime) {
+              curSec = ytPlayer.getCurrentTime() || 0;
+            }
+          } catch (e) {}
+          startDspPlayback(song.video_id, curSec);
+        }
+        return;
+      }
+
+      currentVideoId = song.video_id;
+      if (song.cached) {
+        startDspPlayback(song.video_id, 0);
+      } else {
+        startIframePlayback(song.video_id, 0);
+      }
+    }
+
+    videoEl.onended = () => {
+      if (activeEngine === 'dsp' && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ action: 'next_song' }));
+      }
+    };
+
+    function updateOSD() {
+      const cur = roomState.current_song;
+      const next = (roomState.queue || [])[0];
+      document.getElementById('osdNow').textContent = cur
+        ? `🎵 正在播放：${cur.title.slice(0, 32)}`
+        : '🎤 等待點歌中...';
+      document.getElementById('osdNext').textContent = next
+        ? `下一首：${next.title.slice(0, 26)} (共 ${roomState.queue.length} 首待播)`
+        : '下一首：尚無待播歌曲';
+
+      document.getElementById('osdVocal').textContent = roomState.vocal_cut
+        ? '🎤 伴唱模式 (消人聲)'
+        : '🎵 原唱模式';
+
+      const p = roomState.pitch_semitones || 0;
+      document.getElementById('osdPitch').textContent =
+        `🎼 ${p === 0 ? '原調 (0)' : (p > 0 ? '+' + p : p) + ' Key'}`;
+
+      // 同步遠端手機調音台數值
+      if (roomState.mic_enabled && !micStream) {
+        // 若使用者從手機按開啟且電視已獲得授權，嘗試自動開啟
+        startMicrophone();
+      } else if (!roomState.mic_enabled && micStream) {
+        stopMicrophone(false);
+      }
+      updateMicUI();
+      updateMicDSP();
+      applyAudioDSP();
+      playSong(cur);
+    }
+
+    function playPartySound(type) {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      const ctx = audioCtx || new AudioContextClass();
+      if (ctx.state === 'suspended') ctx.resume();
+
+      if (type === 'applause' || type === 'cheer') {
+        const duration = 1.6;
+        const bufferSize = ctx.sampleRate * duration;
+        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          const env = Math.sin((i / bufferSize) * Math.PI);
+          data[i] = (Math.random() * 2 - 1) * env * 0.35;
+        }
+        const noise = ctx.createBufferSource();
+        noise.buffer = buffer;
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.value = type === 'applause' ? 1200 : 1800;
+        noise.connect(filter);
+        filter.connect(ctx.destination);
+        noise.start();
+      } else if (type === 'clink' || type === 'horn') {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = type === 'horn' ? 'sawtooth' : 'sine';
+        osc.frequency.setValueAtTime(type === 'horn' ? 440 : 1480, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(type === 'horn' ? 880 : 2200, ctx.currentTime + 0.45);
+        g.gain.setValueAtTime(0.35, ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.65);
+        osc.connect(g);
+        g.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.65);
+      }
+    }
+
+    function showReaction(data) {
+      const fx = document.getElementById('fxLayer');
+      const el = document.createElement('div');
+      el.className = 'reaction-burst';
+      el.textContent = `${data.emoji} ${data.label}`;
+      fx.appendChild(el);
+      playPartySound(data.sound);
+      setTimeout(() => el.remove(), 2700);
+    }
+
+    function showBarrage(data) {
+      const fx = document.getElementById('fxLayer');
+      const el = document.createElement('div');
+      el.className = 'barrage-item';
+      el.style.top = `${15 + Math.random() * 55}%`;
+      el.textContent = `💬 ${data.text}`;
+      fx.appendChild(el);
+      setTimeout(() => el.remove(), 8200);
+    }
+
+    function showCenterToast(text) {
+      const t = document.getElementById('centerToast');
+      t.textContent = text;
+      t.style.display = 'block';
+      clearTimeout(window._tvToast);
+      window._tvToast = setTimeout(() => { t.style.display = 'none'; }, 2200);
+    }
+
+    function connectWS() {
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${proto}//${location.host}/ws`);
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'state_update') {
+          roomState = data;
+          updateOSD();
+        } else if (data.type === 'cache_ready') {
+          if (roomState.current_song && roomState.current_song.video_id === data.video_id) {
+            roomState.current_song.cached = true;
+            playSong(roomState.current_song);
+            showCenterToast('🎛️ 伴奏音軌準備完成！已開啟「消人聲」與「升降Key」功能');
+          }
+        } else if (data.type === 'command') {
+          if (data.command === 'toggle_play') {
+            if (activeEngine === 'dsp') {
+              data.is_playing ? videoEl.play() : videoEl.pause();
+            } else if (ytPlayer && ytPlayerReady) {
+              data.is_playing ? ytPlayer.playVideo() : ytPlayer.pauseVideo();
+            }
+          } else if (data.command === 'replay') {
+            if (activeEngine === 'dsp') {
+              videoEl.currentTime = 0;
+              videoEl.play();
+            } else if (ytPlayer && ytPlayerReady) {
+              ytPlayer.seekTo(0);
+              ytPlayer.playVideo();
+            }
+          }
+        } else if (data.type === 'reaction') {
+          showReaction(data);
+        } else if (data.type === 'barrage') {
+          showBarrage(data);
+        } else if (data.type === 'toast') {
+          showCenterToast(data.text);
+        }
+      };
+      ws.onclose = () => setTimeout(connectWS, 1500);
+    }
+
+    document.body.addEventListener('click', () => {
+      if (!audioUnlocked) unlockAudio();
+    });
+
+    loadRoomInfo();
+    refreshMicDevices();
+    connectWS();
+  </script>
+</body>
+</html>

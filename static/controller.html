@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="家庭KTV點歌台" />
+  <title>🎤 歡唱 KTV 點歌台 (iPad / iPhone)</title>
+  <style>
+    :root {
+      --bg: #0b0d14;
+      --card: #151926;
+      --card-hover: #1e2436;
+      --accent: #ff2e93;
+      --accent-2: #00e5ff;
+      --text: #f3f5fa;
+      --muted: #8b95b0;
+      --border: rgba(255, 255, 255, 0.08);
+      --success: #10b981;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Heiti TC", sans-serif;
+      background: radial-gradient(circle at top right, #1f1135 0%, var(--bg) 55%);
+      color: var(--text);
+      min-height: 100vh;
+      padding-bottom: 100px;
+    }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: rgba(11, 13, 20, 0.88);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 16px;
+    }
+    .top-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 800;
+      font-size: 1.15rem;
+      background: linear-gradient(90deg, #ff2e93, #00e5ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .tv-link-btn {
+      text-decoration: none;
+      font-size: 0.8rem;
+      color: var(--accent-2);
+      border: 1px solid rgba(0, 229, 255, 0.35);
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: rgba(0, 229, 255, 0.08);
+    }
+    .now-playing-bar {
+      background: linear-gradient(135deg, rgba(255, 46, 147, 0.16), rgba(0, 229, 255, 0.12));
+      border: 1px solid rgba(255, 46, 147, 0.3);
+      border-radius: 14px;
+      padding: 10px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .np-info {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .np-title {
+      font-size: 0.92rem;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .badge-queue {
+      font-size: 0.75rem;
+      background: rgba(0, 0, 0, 0.45);
+      padding: 3px 9px;
+      border-radius: 99px;
+      color: var(--accent-2);
+      flex-shrink: 0;
+    }
+    .console-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+    .ctrl-btn {
+      border: 1px solid var(--border);
+      background: rgba(21, 25, 38, 0.85);
+      color: var(--text);
+      padding: 9px 6px;
+      border-radius: 10px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      transition: transform 0.1s, background 0.15s;
+    }
+    .ctrl-btn:active { transform: scale(0.95); }
+    .ctrl-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      box-shadow: 0 0 14px rgba(255, 46, 147, 0.45);
+    }
+    .pitch-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      padding-top: 4px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .pitch-label {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .pitch-controls {
+      display: flex;
+      gap: 6px;
+    }
+    .pitch-btn {
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.07);
+      color: var(--text);
+      padding: 5px 12px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      padding: 12px 16px 4px;
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 10px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--muted);
+      font-weight: 700;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+    .tab-btn.active {
+      background: linear-gradient(135deg, #ff2e93, #9c27b0);
+      color: #fff;
+      border-color: transparent;
+    }
+    .container { padding: 12px 16px; max-width: 960px; margin: 0 auto; }
+    .search-box {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .search-input {
+      flex: 1;
+      padding: 13px 16px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      font-size: 1rem;
+      outline: none;
+    }
+    .search-input:focus { border-color: var(--accent-2); }
+    .search-btn {
+      padding: 0 20px;
+      border-radius: 14px;
+      border: none;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 700;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+    .filter-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .quick-tags {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+    .tag {
+      white-space: nowrap;
+      padding: 6px 12px;
+      border-radius: 99px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+    .tag:hover, .tag:active { color: #fff; border-color: var(--accent-2); }
+    .ktv-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.8rem;
+      color: var(--accent-2);
+      cursor: pointer;
+      user-select: none;
+    }
+    .song-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+    }
+    .song-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 10px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    .song-thumb {
+      width: 96px;
+      height: 62px;
+      border-radius: 10px;
+      object-fit: cover;
+      flex-shrink: 0;
+      background: #000;
+    }
+    .song-meta {
+      flex: 1;
+      min-width: 0;
+    }
+    .song-title {
+      font-size: 0.9rem;
+      font-weight: 700;
+      line-height: 1.3;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      margin-bottom: 4px;
+    }
+    .song-sub {
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+    .song-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .btn-add {
+      padding: 7px 12px;
+      border-radius: 9px;
+      border: none;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 700;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+    .btn-priority {
+      padding: 5px 10px;
+      border-radius: 9px;
+      border: 1px solid rgba(0, 229, 255, 0.4);
+      background: rgba(0, 229, 255, 0.1);
+      color: var(--accent-2);
+      font-weight: 600;
+      font-size: 0.75rem;
+      cursor: pointer;
+    }
+    .party-box {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      margin-top: 8px;
+    }
+    .reaction-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin: 12px 0 18px;
+    }
+    .react-btn {
+      padding: 14px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: var(--card-hover);
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .react-btn:active { transform: scale(0.96); }
+    .toast {
+      position: fixed;
+      bottom: 22px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(16, 185, 129, 0.95);
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 99px;
+      font-weight: 700;
+      font-size: 0.9rem;
+      box-shadow: 0 8px 25px rgba(0,0,0,0.5);
+      display: none;
+      z-index: 100;
+    }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="top-row">
+      <div class="brand">🎤 HOME KTV 點歌台</div>
+      <a href="/tv" target="_blank" class="tv-link-btn">📺 開啟電視端畫面</a>
+    </div>
+
+    <div class="now-playing-bar">
+      <div class="np-info">
+        <div class="np-title" id="npTitle">尚未點歌 — 快搜尋下方 YouTube 歌曲開唱！</div>
+        <div class="badge-queue" id="queueCountBadge">待播 0 首</div>
+      </div>
+
+      <div class="console-grid">
+        <button class="ctrl-btn" onclick="sendAction({action:'toggle_play'})" id="btnPlayPause">⏯️ 暫停/播放</button>
+        <button class="ctrl-btn" onclick="sendAction({action:'next_song'})">⏭️ 切歌</button>
+        <button class="ctrl-btn" onclick="sendAction({action:'replay'})">🔄 重唱</button>
+        <button class="ctrl-btn" id="btnVocal" onclick="sendAction({action:'toggle_vocal'})">🎤 伴唱消音</button>
+      </div>
+
+      <div class="pitch-row">
+        <span class="pitch-label" id="pitchDisplay">🎼 升降調：原調 (0)</span>
+        <div class="pitch-controls">
+          <button class="pitch-btn" onclick="sendAction({action:'set_pitch', delta:-1})">♭ 降 Key (-1)</button>
+          <button class="pitch-btn" onclick="sendAction({action:'set_pitch', delta:0})">原調</button>
+          <button class="pitch-btn" onclick="sendAction({action:'set_pitch', delta:1})">♯ 升 Key (+1)</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <button class="tab-btn active" id="tabSearchBtn" onclick="switchTab('search')">🔍 搜尋點歌</button>
+    <button class="tab-btn" id="tabQueueBtn" onclick="switchTab('queue')">📋 已點歌單 (<span id="tabQueueNum">0</span>)</button>
+    <button class="tab-btn" id="tabPartyBtn" onclick="switchTab('party')">🎙️ 調音與氣氛</button>
+  </div>
+
+  <!-- 1. 搜尋點歌分頁 -->
+  <div class="container" id="panelSearch">
+    <div class="search-box">
+      <input type="text" id="searchInput" class="search-input" placeholder="輸入歌名或歌手（例如：周杰倫 晴天、告五人）..." onkeydown="if(event.key==='Enter') doSearch()" />
+      <button class="search-btn" onclick="doSearch()">搜尋</button>
+    </div>
+
+    <div class="filter-row">
+      <div class="quick-tags">
+        <span class="tag" onclick="quickSearch('華語 KTV 排行榜 伴奏')">🔥 華語熱門</span>
+        <span class="tag" onclick="quickSearch('周杰倫 KTV 伴奏')">🎵 周杰倫</span>
+        <span class="tag" onclick="quickSearch('台語經典 KTV 伴奏')">🥃 台語金曲</span>
+        <span class="tag" onclick="quickSearch('男女對唱 KTV 伴奏')">💕 男女對唱</span>
+        <span class="tag" onclick="quickSearch('張惠妹 KTV 伴奏')">🎤 張惠妹</span>
+        <span class="tag" onclick="quickSearch('五月天 KTV 伴奏')">🎸 五月天</span>
+      </div>
+      <label class="ktv-toggle">
+        <input type="checkbox" id="ktvModeCheck" checked />
+        自動加「KTV 伴奏」
+      </label>
+    </div>
+
+    <div id="searchStatus" style="color:var(--muted); font-size:0.88rem; margin-bottom:10px;"></div>
+    <div class="song-grid" id="searchResults"></div>
+  </div>
+
+  <!-- 2. 已點歌單分頁 -->
+  <div class="container hidden" id="panelQueue">
+    <div id="queueList" class="song-grid"></div>
+  </div>
+
+  <!-- 3. 聚會互動與麥克風調音台分頁 -->
+  <div class="container hidden" id="panelParty">
+    <div class="party-box" style="margin-bottom:14px; border-color:rgba(255,46,147,0.4);">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+        <h3>🎙️ 麥克風 KTV 混音調音台</h3>
+        <button class="btn-add" id="remoteMicBtn" onclick="toggleRemoteMic()">🎙️ 開啟麥克風</button>
+      </div>
+      <p style="color:var(--muted); font-size:0.8rem; margin-bottom:12px;">
+        首次請先在電腦／電視端 `/tv` 左下角點「開啟麥克風」允許權限，之後即可用手機隨時遠端調整迴音與音量！
+      </p>
+
+      <div style="display:flex; flex-direction:column; gap:12px; font-size:0.9rem;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="width:95px;">🎙️ 人聲音量</span>
+          <input type="range" id="ctrlMicVol" min="0" max="200" value="100" style="flex:1; accent-color:#ff2e93;" onchange="sendRemoteMicUpdate()" />
+          <span id="ctrlMicVolVal" style="width:45px; text-align:right;">100%</span>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="width:95px;">✨ KTV 迴音</span>
+          <input type="range" id="ctrlReverb" min="0" max="100" value="45" style="flex:1; accent-color:#00e5ff;" onchange="sendRemoteMicUpdate()" />
+          <span id="ctrlReverbVal" style="width:45px; text-align:right;">45%</span>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="width:95px;">🎵 伴奏音量</span>
+          <input type="range" id="ctrlMusicVol" min="0" max="100" value="85" style="flex:1; accent-color:#10b981;" onchange="sendRemoteMicUpdate()" />
+          <span id="ctrlMusicVolVal" style="width:45px; text-align:right;">85%</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="party-box">
+      <h3 style="margin-bottom:6px;">🎉 包廂氣氛音效與特效</h3>
+      <p style="color:var(--muted); font-size:0.85rem;">按一下按鈕，電視大螢幕會立刻發出歡呼音效與滿版特效！</p>
+      <div class="reaction-grid">
+        <button class="react-btn" onclick="sendReaction('👏', '掌聲鼓勵！太好聽啦！', 'applause')">👏 掌聲鼓勵</button>
+        <button class="react-btn" onclick="sendReaction('🎉', '全場尖叫歡呼！！', 'cheer')">🎉 歡呼尖叫</button>
+        <button class="react-btn" onclick="sendReaction('🍻', '乾杯！乎乾啦！', 'clink')">🍻 罰喝一杯</button>
+        <button class="react-btn" onclick="sendReaction('🔥', '歌神降臨！全場膜拜！', 'horn')">🔥 歌神降臨</button>
+      </div>
+
+      <h3 style="margin-bottom:8px;">💬 發送電視跑馬燈彈幕</h3>
+      <div class="search-box">
+        <input type="text" id="barrageInput" class="search-input" placeholder="輸入要飛過電視畫面的留言..." onkeydown="if(event.key==='Enter') sendBarrage()" />
+        <button class="search-btn" onclick="sendBarrage()">發送</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toastBox"></div>
+
+  <script>
+    let ws;
+    let roomState = { current_song: null, queue: [], vocal_cut: false, pitch_semitones: 0 };
+
+    function connectWS() {
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${proto}//${location.host}/ws`);
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'state_update') {
+          roomState = data;
+          renderState();
+        } else if (data.type === 'toast') {
+          showToast(data.text);
+        }
+      };
+      ws.onclose = () => setTimeout(connectWS, 1500);
+    }
+
+    function sendAction(payload) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(payload));
+      }
+    }
+
+    function renderState() {
+      const np = document.getElementById('npTitle');
+      if (roomState.current_song) {
+        np.textContent = `🎵 正在唱：${roomState.current_song.title}`;
+      } else {
+        np.textContent = '尚未點歌 — 快搜尋下方 YouTube 歌曲開唱！';
+      }
+
+      const qLen = (roomState.queue || []).length;
+      document.getElementById('queueCountBadge').textContent = `待播 ${qLen} 首`;
+      document.getElementById('tabQueueNum').textContent = qLen;
+
+      const btnVocal = document.getElementById('btnVocal');
+      if (roomState.vocal_cut) {
+        btnVocal.classList.add('active');
+        btnVocal.textContent = '🎤 伴唱中(消人聲)';
+      } else {
+        btnVocal.classList.remove('active');
+        btnVocal.textContent = '🎵 原唱模式';
+      }
+
+      const p = roomState.pitch_semitones || 0;
+      document.getElementById('pitchDisplay').textContent =
+        `🎼 升降調：${p === 0 ? '原調 (0)' : (p > 0 ? '+' + p : p) + ' 半音'}`;
+
+      // 同步遠端麥克風調音台狀態
+      const rBtn = document.getElementById('remoteMicBtn');
+      if (rBtn) {
+        rBtn.textContent = roomState.mic_enabled ? '🎙️ 麥克風已開啟 (點此關閉)' : '🎙️ 開啟麥克風';
+        rBtn.style.background = roomState.mic_enabled ? '#10b981' : 'var(--accent)';
+        document.getElementById('ctrlMicVol').value = roomState.mic_volume ?? 100;
+        document.getElementById('ctrlMicVolVal').textContent = `${roomState.mic_volume ?? 100}%`;
+        document.getElementById('ctrlReverb').value = roomState.reverb_level ?? 45;
+        document.getElementById('ctrlReverbVal').textContent = `${roomState.reverb_level ?? 45}%`;
+        document.getElementById('ctrlMusicVol').value = roomState.volume ?? 85;
+        document.getElementById('ctrlMusicVolVal').textContent = `${roomState.volume ?? 85}%`;
+      }
+
+      renderQueue();
+    }
+
+    function toggleRemoteMic() {
+      sendAction({
+        action: 'update_mic',
+        mic_enabled: !roomState.mic_enabled,
+        toast: !roomState.mic_enabled ? '🎙️ 已發送開啟麥克風指令' : '🔇 麥克風已關閉'
+      });
+    }
+
+    function sendRemoteMicUpdate() {
+      const micVol = parseInt(document.getElementById('ctrlMicVol').value, 10);
+      const rev = parseInt(document.getElementById('ctrlReverb').value, 10);
+      const musVol = parseInt(document.getElementById('ctrlMusicVol').value, 10);
+      document.getElementById('ctrlMicVolVal').textContent = `${micVol}%`;
+      document.getElementById('ctrlReverbVal').textContent = `${rev}%`;
+      document.getElementById('ctrlMusicVolVal').textContent = `${musVol}%`;
+      sendAction({
+        action: 'update_mic',
+        mic_volume: micVol,
+        reverb_level: rev,
+        volume: musVol
+      });
+    }
+
+    function renderQueue() {
+      const box = document.getElementById('queueList');
+      const q = roomState.queue || [];
+      if (q.length === 0) {
+        box.innerHTML = `<div style="color:var(--muted); padding:24px; text-align:center;">目前待播清單是空的，快去搜尋點歌吧！</div>`;
+        return;
+      }
+      box.innerHTML = q.map((song, idx) => `
+        <div class="song-card">
+          <img class="song-thumb" src="${song.thumbnail}" alt="" />
+          <div class="song-meta">
+            <div class="song-title">${idx + 1}. ${escapeHtml(song.title)}</div>
+            <div class="song-sub">${escapeHtml(song.channel || '')}</div>
+          </div>
+          <div class="song-actions">
+            ${idx > 0 ? `<button class="btn-priority" onclick="sendAction({action:'promote_song', index:${idx}})">⚡ 頂歌</button>` : ''}
+            <button class="btn-priority" style="color:#f87171; border-color:rgba(248,113,113,0.35);" onclick="sendAction({action:'remove_song', index:${idx}})">刪除</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function doSearch() {
+      const q = document.getElementById('searchInput').value.trim();
+      if (!q) return;
+      const ktvMode = document.getElementById('ktvModeCheck').checked;
+      const status = document.getElementById('searchStatus');
+      const container = document.getElementById('searchResults');
+      status.textContent = '🔍 正在搜尋 YouTube 歌曲...';
+      container.innerHTML = '';
+
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&ktv_mode=${ktvMode}`);
+        const data = await res.json();
+        status.textContent = `找到 ${data.results.length} 首結果（搜尋詞：${data.query}）`;
+        container.innerHTML = data.results.map((song) => {
+          const encodedSong = encodeURIComponent(JSON.stringify(song));
+          return `
+            <div class="song-card">
+              <img class="song-thumb" src="${song.thumbnail}" alt="" />
+              <div class="song-meta">
+                <div class="song-title">${escapeHtml(song.title)}</div>
+                <div class="song-sub">${escapeHtml(song.channel)} · ${song.duration}</div>
+              </div>
+              <div class="song-actions">
+                <button class="btn-add" onclick="orderSong('${encodedSong}', false)">＋ 點歌</button>
+                <button class="btn-priority" onclick="orderSong('${encodedSong}', true)">⚡ 插播</button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      } catch (err) {
+        status.textContent = '搜尋失敗，請確認網路連線。';
+      }
+    }
+
+    function quickSearch(q) {
+      document.getElementById('searchInput').value = q;
+      doSearch();
+    }
+
+    function orderSong(encodedSong, priority) {
+      const song = JSON.parse(decodeURIComponent(encodedSong));
+      sendAction({ action: 'add_song', song, priority });
+    }
+
+    function sendReaction(emoji, label, sound) {
+      sendAction({ action: 'reaction', emoji, label, sound });
+    }
+
+    function sendBarrage() {
+      const input = document.getElementById('barrageInput');
+      if (!input.value.trim()) return;
+      sendAction({ action: 'barrage', text: input.value.trim() });
+      input.value = '';
+    }
+
+    function switchTab(tab) {
+      document.getElementById('panelSearch').classList.toggle('hidden', tab !== 'search');
+      document.getElementById('panelQueue').classList.toggle('hidden', tab !== 'queue');
+      document.getElementById('panelParty').classList.toggle('hidden', tab !== 'party');
+      document.getElementById('tabSearchBtn').classList.toggle('active', tab === 'search');
+      document.getElementById('tabQueueBtn').classList.toggle('active', tab === 'queue');
+      document.getElementById('tabPartyBtn').classList.toggle('active', tab === 'party');
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toastBox');
+      t.textContent = msg;
+      t.style.display = 'block';
+      clearTimeout(window._toastTimer);
+      window._toastTimer = setTimeout(() => { t.style.display = 'none'; }, 2400);
+    }
+
+    function escapeHtml(str) {
+      return (str || '').replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+    }
+
+    connectWS();
+    quickSearch('華語 KTV 熱門伴奏');
+  </script>
+</body>
+</html>
