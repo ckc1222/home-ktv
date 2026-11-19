@@ -42,7 +42,18 @@ chmod +x install_demucs.sh start_ktv.sh
    git clone https://github.com/ckc1222/home-ktv.git
    cd home-ktv
    ```
-3. 雙擊執行 **`install_demucs.bat`**（自動安裝 Meta Demucs AI 模型與靜態 `ffmpeg.exe`），接著雙擊 **`start_ktv.bat`** 即可啟動！（直接雙擊 `start_ktv.bat` 也會自動檢查並安裝 Demucs）。
+3. 雙擊執行 **`install_demucs.bat`**（自動安裝 Meta Demucs AI 模型與靜態 `ffmpeg.exe`，若偵測到 NVIDIA 獨顯會自動啟用 CUDA 加速），接著雙擊 **`start_ktv.bat`** 即可啟動！
+
+### 🍓 Raspberry Pi 4 / 5 (Raspberry Pi OS 64-bit)
+
+1. 建議使用 **32GB 或 64GB (A2 等級)** MicroSD 卡，並安裝 **Raspberry Pi OS (64-bit)**。
+2. 打開終端機執行（腳本會自動安裝 Linux ARM64 版的 `yt-dlp`、`deno`、`ffmpeg` 與 Python 環境）：
+   ```bash
+   git clone https://github.com/ckc1222/home-ktv.git
+   cd home-ktv
+   chmod +x install_demucs.sh start_ktv.sh
+   ./start_ktv.sh
+   ```
 
 ---
 
