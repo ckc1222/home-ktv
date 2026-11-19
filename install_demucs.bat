@@ -19,6 +19,14 @@ if not exist ".venv\Scripts\python.exe" (
 
 call .venv\Scripts\activate.bat
 python -m pip install --upgrade pip
+
+:: 自動偵測 Windows 是否配有 NVIDIA 獨立顯卡 (nvidia-smi)，若有則自動安裝 CUDA GPU 加速版 PyTorch
+where nvidia-smi >nul 2>&1
+if %errorlevel% equ 0 (
+    echo 🚀 偵測到 NVIDIA 獨立顯卡！正在安裝 CUDA GPU 加速版 PyTorch...
+    pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+)
+
 pip install -r requirements.txt
 
 if not exist "bin" mkdir bin
