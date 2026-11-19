@@ -132,12 +132,12 @@
       bottom: 24px;
       left: 24px;
       z-index: 35;
-      background: rgba(12, 15, 26, 0.88);
+      background: rgba(12, 15, 26, 0.92);
       backdrop-filter: blur(14px);
-      border: 1px solid rgba(255, 46, 147, 0.4);
+      border: 1px solid rgba(255, 46, 147, 0.45);
       border-radius: 18px;
       padding: 14px 16px;
-      width: 320px;
+      width: 360px;
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.65);
       transition: all 0.2s ease;
     }
@@ -163,9 +163,9 @@
       gap: 6px;
     }
     .mic-toggle-btn.active {
-      background: linear-gradient(135deg, #ff2e93, #9c27b0);
+      background: linear-gradient(135deg, #10b981, #059669);
       border-color: #fff;
-      box-shadow: 0 0 18px rgba(255, 46, 147, 0.65);
+      box-shadow: 0 0 18px rgba(16, 185, 129, 0.65);
     }
     .mic-expand-btn {
       background: rgba(255, 255, 255, 0.08);
@@ -177,7 +177,7 @@
       font-size: 0.8rem;
     }
     .meter-wrap {
-      height: 6px;
+      height: 8px;
       background: rgba(255, 255, 255, 0.1);
       border-radius: 99px;
       overflow: hidden;
@@ -187,7 +187,7 @@
       height: 100%;
       width: 0%;
       background: linear-gradient(90deg, #10b981, #00e5ff, #ff2e93);
-      transition: width 0.06s linear;
+      transition: width 0.05s linear;
     }
     .mic-details {
       margin-top: 12px;
@@ -216,6 +216,18 @@
       padding: 6px 8px;
       border-radius: 8px;
       font-size: 0.78rem;
+    }
+    .raw-mode-banner {
+      background: rgba(16, 185, 129, 0.16);
+      border: 1px solid rgba(16, 185, 129, 0.45);
+      padding: 8px 10px;
+      border-radius: 10px;
+      color: #a7f3d0;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
     }
 
     /* 右下角手機掃碼點歌 QR Code */
@@ -310,17 +322,19 @@
   </style>
 </head>
 <body>
-  <!-- 頂部包廂跑馬燈 -->
+  <!-- 頂部包廂跑馬燈與快捷控制列 -->
   <div class="osd-top">
-    <div class="osd-pill">
+    <div class="osd-pill" style="pointer-events:auto;">
       <span id="osdNow">🎤 等待點歌中...</span>
       <span style="color:#8b95b0;">|</span>
       <span id="osdNext" style="color:#00e5ff;">下一首：尚無待播歌曲</span>
     </div>
-    <div class="osd-pill">
-      <span class="status-badge" id="osdEngine" style="border-color:#10b981; color:#a7f3d0; background:rgba(16,185,129,0.2);">⚡ 準備就緒</span>
-      <span class="status-badge" id="osdVocal">🎵 原唱模式</span>
+    <div class="osd-pill" style="pointer-events:auto; gap:10px;">
+      <button onclick="tvTogglePlay()" id="tvPlayPauseBtn" style="background:rgba(255,46,147,0.28); border:1px solid #ff2e93; color:#fff; padding:5px 14px; border-radius:99px; font-weight:800; cursor:pointer; font-size:0.88rem;">⏯️ 暫停/播放 (空白鍵)</button>
+      <button onclick="ws.send(JSON.stringify({action:'next_song'}))" style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.25); color:#fff; padding:5px 12px; border-radius:99px; font-weight:700; cursor:pointer; font-size:0.85rem;">⏭️ 切歌</button>
+      <button onclick="ws.send(JSON.stringify({action:'toggle_vocal'}))" class="status-badge" id="osdVocal" style="cursor:pointer;">🎵 原唱模式</button>
       <span class="status-badge" id="osdPitch" style="border-color:#00e5ff; color:#9ef7ff; background:rgba(0,229,255,0.2);">🎼 原調 (0)</span>
+      <span class="status-badge" id="osdEngine" style="border-color:#10b981; color:#a7f3d0; background:rgba(16,185,129,0.2);">⚡ 準備就緒</span>
     </div>
   </div>
 
@@ -328,14 +342,14 @@
   <div id="idleScreen">
     <div class="idle-title">🎉 家庭 KTV 歡唱包廂</div>
     <div class="idle-sub">請用 iPad 或 iPhone 掃描右下角 QR Code 立即點唱 YouTube 歌曲！</div>
-    <div style="font-size:1rem; color:#8b95b0;">（支援麥克風 KTV 迴音混音、原唱/伴唱消人聲、即時升降 Key、包廂互動彈幕）</div>
+    <div style="font-size:1rem; color:#8b95b0;">（支援麥克風原音直通測試、KTV 迴音混音、原唱/伴唱消人聲、即時升降 Key）</div>
   </div>
 
   <!-- 解鎖自動播放聲音按鈕 -->
   <button id="unlockAudioBtn" onclick="unlockAudio()">🔊 點擊此處開啟電視聲音（首次開啟必點）</button>
 
   <!-- HTML5 Video (支援 WebAudio 即時消人聲與升降 Key) -->
-  <video id="videoPlayer" playsinline crossorigin="anonymous" class="hidden"></video>
+  <video id="videoPlayer" playsinline class="hidden"></video>
 
   <!-- 即時秒播 YouTube IFrame 播放器 -->
   <div id="ytIframeContainer" class="invisible">
@@ -350,18 +364,45 @@
   <div class="mic-card">
     <div class="mic-header">
       <button class="mic-toggle-btn" id="micToggleBtn" onclick="toggleMic()">
-        🎙️ 點此開啟麥克風歡唱
+        🎙️ 點此開啟麥克風測試
       </button>
       <button class="mic-expand-btn" onclick="toggleMicPanel()">調音 ⚙️</button>
     </div>
-    <div class="meter-wrap" title="麥克風收音音量">
-      <div class="meter-fill" id="micMeterFill"></div>
+    <div style="display:flex; align-items:center; gap:6px; margin-top:8px; font-size:0.72rem; color:#9ca3af;">
+      <span style="width:42px;">🎙️ 人聲</span>
+      <div class="meter-wrap" style="flex:1; margin-top:0;">
+        <div class="meter-fill" id="micMeterFill"></div>
+      </div>
+    </div>
+    <div style="display:flex; align-items:center; gap:6px; margin-top:5px; font-size:0.72rem; color:#9ca3af;">
+      <span style="width:42px;">🎵 伴奏</span>
+      <div class="meter-wrap" style="flex:1; margin-top:0;">
+        <div class="meter-fill" id="musicMeterFill" style="background:linear-gradient(90deg, #00e5ff, #3b82f6);"></div>
+      </div>
     </div>
 
     <div class="mic-details" id="micDetailsPanel">
-      <select id="micDeviceSelect" class="device-select" onchange="restartMicStream()">
-        <option value="">🎙️ 預設麥克風 (Mac / AirPods)</option>
-      </select>
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
+        <label class="raw-mode-banner" style="flex:1;">
+          <input type="checkbox" id="rawVoiceCheck" checked onchange="onRawModeToggle()" />
+          🎧 100% 純原音極速直通
+        </label>
+        <span id="latencyBadge" style="font-size:0.75rem; color:#00e5ff; background:rgba(0,229,255,0.12); border:1px solid rgba(0,229,255,0.35); padding:6px 8px; border-radius:8px; white-space:nowrap;">⚡ -- ms</span>
+      </div>
+
+      <div>
+        <div style="color:#9ca3af; margin-bottom:3px;">🎙️ 選擇收音麥克風（推薦選 INZONE 或 AirPods）：</div>
+        <select id="micDeviceSelect" class="device-select" onchange="restartMicStream()">
+          <option value="">🎙️ 預設麥克風</option>
+        </select>
+      </div>
+
+      <div>
+        <div style="color:#9ca3af; margin-bottom:3px;">🔊 選擇人聲輸出喇叭（可選 BenQ 螢幕或 Mac mini 喇叭）：</div>
+        <select id="speakerDeviceSelect" class="device-select" onchange="changeSpeakerOutput()">
+          <option value="">🔊 系統預設輸出喇叭</option>
+        </select>
+      </div>
 
       <div class="slider-row">
         <span style="width:78px;">🎙️ 人聲音量</span>
@@ -369,21 +410,21 @@
         <span id="micVolLabel" style="width:38px; text-align:right;">100%</span>
       </div>
 
-      <div class="slider-row">
+      <div class="slider-row" id="reverbRow" style="opacity:0.4;">
         <span style="width:78px;">✨ KTV 迴音</span>
-        <input type="range" id="reverbSlider" min="0" max="100" value="45" oninput="onLocalMicParamChange()" />
-        <span id="reverbLabel" style="width:38px; text-align:right;">45%</span>
+        <input type="range" id="reverbSlider" min="0" max="100" value="0" oninput="onLocalMicParamChange()" />
+        <span id="reverbLabel" style="width:38px; text-align:right;">0%</span>
       </div>
 
       <div class="slider-row">
         <span style="width:78px;">🎵 伴奏音量</span>
-        <input type="range" id="musicVolSlider" min="0" max="100" value="85" oninput="onLocalMicParamChange()" />
-        <span id="musicVolLabel" style="width:38px; text-align:right;">85%</span>
+        <input type="range" id="musicVolSlider" min="0" max="100" value="80" oninput="onLocalMicParamChange()" />
+        <span id="musicVolLabel" style="width:38px; text-align:right;">80%</span>
       </div>
 
       <label style="display:flex; align-items:center; gap:6px; color:#9ca3af; cursor:pointer; margin-top:2px;">
         <input type="checkbox" id="antiHowlCheck" onchange="onAntiHowlChange()" />
-        🛡️ 防筆電喇叭回授嘯叫（未戴耳機外放時勾選）
+        🛡️ 防喇叭回授嘯叫（未戴耳機、用外放喇叭唱時可勾選）
       </label>
     </div>
   </div>
@@ -405,29 +446,34 @@
     let roomState = {
       mic_enabled: false,
       mic_volume: 100,
-      reverb_level: 45,
-      volume: 85,
+      reverb_level: 0,
+      volume: 80,
       anti_howl: false
     };
     let ytPlayer = null;
     let ytPlayerReady = false;
     let pendingIframeVideoId = null;
-    let activeEngine = 'none'; // 'dsp' or 'iframe'
+    let activeEngine = 'none';
     let audioUnlocked = false;
 
-    // WebAudio 伴奏音訊節點
+    // 單一整合式 WebAudio 混音引擎（讓 MTV 伴奏與麥克風人聲強制走同一個 AudioContext 輸出，保證兩邊聲音永遠從同一個耳機/喇叭出來！）
     let audioCtx = null;
     let sourceNode = null;
     let dryGain = null;
     let vocalCutGain = null;
+    let directBypassGain = null;
+    let pitchShiftGain = null;
+    window._globalPitchProcessor = null;
     let musicMasterGain = null;
+    let musicAnalyser = null;
     let currentPitchRatio = 1.0;
 
-    // WebAudio KTV 麥克風與混響節點
+    // 麥克風節點（共用同一個 audioCtx）
     let micStream = null;
     let micSourceNode = null;
     let micDryGain = null;
     let micWetGain = null;
+    let micConvolver = null;
     let micMasterGain = null;
     let micAnalyser = null;
     let meterAnimId = null;
@@ -435,25 +481,31 @@
     const videoEl = document.getElementById('videoPlayer');
 
     function unlockAudio() {
-      audioUnlocked = true;
-      document.getElementById('unlockAudioBtn').classList.add('hidden');
       initWebAudio();
-      if (audioCtx && audioCtx.state === 'suspended') {
-        audioCtx.resume();
+      if (audioCtx) {
+        audioCtx.resume().then(() => {
+          if (audioCtx.state === 'running') {
+            audioUnlocked = true;
+            document.getElementById('unlockAudioBtn').classList.add('hidden');
+          }
+        }).catch(() => {});
       }
       videoEl.muted = false;
-      if (activeEngine === 'dsp' && videoEl.paused && currentVideoId) {
+      videoEl.volume = 1.0;
+      applyAudioDSP();
+      if (activeEngine === 'dsp' && videoEl.paused && currentVideoId && roomState.is_playing !== false) {
         videoEl.play().catch(() => {});
       }
       if (activeEngine === 'iframe' && ytPlayer && ytPlayerReady) {
         ytPlayer.unMute();
         ytPlayer.setVolume(roomState.volume ?? 85);
-        ytPlayer.playVideo();
+        if (roomState.is_playing !== false) {
+          ytPlayer.playVideo();
+        }
       }
     }
 
-    // 合成 KTV 豪華立體聲包廂混響脈衝響應 (Stereo Hall Impulse Response)
-    function createKtvReverbImpulse(ctx, duration = 2.2, decay = 2.4) {
+    function createKtvReverbImpulse(ctx, duration = 1.8, decay = 2.5) {
       const rate = ctx.sampleRate;
       const length = Math.floor(rate * duration);
       const impulse = ctx.createBuffer(2, length, rate);
@@ -461,8 +513,8 @@
       const right = impulse.getChannelData(1);
       for (let i = 0; i < length; i++) {
         const env = Math.pow(1 - i / length, decay);
-        left[i] = (Math.random() * 2 - 1) * env;
-        right[i] = (Math.random() * 2 - 1) * env;
+        left[i] = (Math.random() * 2 - 1) * env * 0.12;
+        right[i] = (Math.random() * 2 - 1) * env * 0.12;
       }
       return impulse;
     }
@@ -470,14 +522,13 @@
     function initWebAudio() {
       if (audioCtx) return;
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      audioCtx = new AudioContextClass({ latencyHint: 'interactive' });
+      // 使用 latencyHint: 0 讓伴奏與麥克風共用同一個超低延遲硬體通道
+      audioCtx = new AudioContextClass({ latencyHint: 0 });
       sourceNode = audioCtx.createMediaElementSource(videoEl);
 
-      // 1. 原唱立體聲通道 (Dry)
       dryGain = audioCtx.createGain();
       dryGain.gain.value = 1.0;
 
-      // 2. 伴唱消人聲通道 (Vocal Canceller: L - R 相位抵銷 + 140Hz 以下低音保留)
       vocalCutGain = audioCtx.createGain();
       vocalCutGain.gain.value = 0.0;
 
@@ -507,64 +558,93 @@
 
       sourceNode.connect(dryGain);
 
-      // 3. 即時升降 Key 處理器 + 伴奏主音量
-      const pitchProcessor = createPitchShifterNode(audioCtx);
+      directBypassGain = audioCtx.createGain();
+      directBypassGain.gain.value = 1.0;
+
+      pitchShiftGain = audioCtx.createGain();
+      pitchShiftGain.gain.value = 0.0;
+
+      window._globalPitchProcessor = createPitchShifterNode(audioCtx);
       musicMasterGain = audioCtx.createGain();
       musicMasterGain.gain.value = 0.85;
 
-      dryGain.connect(pitchProcessor);
-      vocalCutGain.connect(pitchProcessor);
-      pitchProcessor.connect(musicMasterGain);
+      musicAnalyser = audioCtx.createAnalyser();
+      musicAnalyser.fftSize = 256;
+
+      dryGain.connect(directBypassGain);
+      vocalCutGain.connect(directBypassGain);
+      directBypassGain.connect(musicMasterGain);
+
+      dryGain.connect(window._globalPitchProcessor);
+      vocalCutGain.connect(window._globalPitchProcessor);
+      window._globalPitchProcessor.connect(pitchShiftGain);
+      pitchShiftGain.connect(musicMasterGain);
+
+      musicMasterGain.connect(musicAnalyser);
       musicMasterGain.connect(audioCtx.destination);
 
-      // 4. 初始化 KTV 麥克風效果器鏈 (Highpass -> Presence EQ -> Compressor -> Dry + Hall Reverb)
-      initMicEffectChain();
-    }
-
-    function initMicEffectChain() {
+      // 同時在同一個 audioCtx 建立麥克風混音匯流排
       micDryGain = audioCtx.createGain();
       micWetGain = audioCtx.createGain();
       micMasterGain = audioCtx.createGain();
       micAnalyser = audioCtx.createAnalyser();
       micAnalyser.fftSize = 256;
 
-      // KTV 25ms Pre-Delay + 3kHz 溫暖高頻衰減 + 立體聲大廳混響
-      const preDelay = audioCtx.createDelay(0.1);
-      preDelay.delayTime.value = 0.025;
-
-      const reverbTone = audioCtx.createBiquadFilter();
-      reverbTone.type = 'lowpass';
-      reverbTone.frequency.value = 3200;
-
-      const convolver = audioCtx.createConvolver();
-      convolver.buffer = createKtvReverbImpulse(audioCtx, 2.2, 2.5);
-
-      preDelay.connect(reverbTone);
-      reverbTone.connect(convolver);
-      convolver.connect(micWetGain);
+      micConvolver = audioCtx.createConvolver();
+      micConvolver.normalize = false;
+      micConvolver.buffer = createKtvReverbImpulse(audioCtx, 1.8, 2.5);
+      micConvolver.connect(micWetGain);
 
       micDryGain.connect(micMasterGain);
       micWetGain.connect(micMasterGain);
       micMasterGain.connect(audioCtx.destination);
 
-      // 將 Pre-Delay 掛在 audioCtx 上供麥克風串流連接
-      audioCtx._ktvPreDelay = preDelay;
-      updateMicDSP();
+      startLevelMeterLoop();
     }
 
-    async function refreshMicDevices() {
+    async function refreshAudioDevices() {
       try {
         const devices = await navigator.mediaDevices.enumerateDevices();
         const audioInputs = devices.filter((d) => d.kind === 'audioinput');
-        const sel = document.getElementById('micDeviceSelect');
-        const currentVal = sel.value;
-        sel.innerHTML = audioInputs
-          .map((d, idx) => `<option value="${d.deviceId}">🎙️ ${d.label || '麥克風 ' + (idx + 1)}</option>`)
-          .join('');
-        if (currentVal && audioInputs.some((d) => d.deviceId === currentVal)) {
-          sel.value = currentVal;
+        const audioOutputs = devices.filter((d) => d.kind === 'audiooutput');
+
+        const micSel = document.getElementById('micDeviceSelect');
+        const curMic = micSel.value;
+        if (audioInputs.length > 0) {
+          micSel.innerHTML = audioInputs
+            .map((d, idx) => `<option value="${d.deviceId}">🎙️ ${d.label || '麥克風 ' + (idx + 1)}</option>`)
+            .join('');
+          if (curMic && audioInputs.some((d) => d.deviceId === curMic)) {
+            micSel.value = curMic;
+          }
+        }
+
+        const spkSel = document.getElementById('speakerDeviceSelect');
+        const curSpk = spkSel.value;
+        if (audioOutputs.length > 0) {
+          spkSel.innerHTML = `<option value="">🔊 系統預設輸出喇叭</option>` + audioOutputs
+            .map((d, idx) => `<option value="${d.deviceId}">🔊 ${d.label || '喇叭 ' + (idx + 1)}</option>`)
+            .join('');
+          if (curSpk && audioOutputs.some((d) => d.deviceId === curSpk)) {
+            spkSel.value = curSpk;
+          }
         }
       } catch (e) {}
+    }
+
+    async function changeSpeakerOutput() {
+      const sinkId = document.getElementById('speakerDeviceSelect').value;
+      try {
+        if (typeof videoEl.setSinkId === 'function') {
+          await videoEl.setSinkId(sinkId);
+        }
+        if (audioCtx && typeof audioCtx.setSinkId === 'function') {
+          await audioCtx.setSinkId(sinkId);
+        }
+        showCenterToast('🔊 已切換聲音輸出喇叭');
+      } catch (e) {
+        console.warn('setSinkId error:', e);
+      }
     }
 
     async function startMicrophone() {
@@ -575,63 +655,93 @@
         if (micStream) {
           micStream.getTracks().forEach((t) => t.stop());
         }
+        if (micSourceNode) {
+          try { micSourceNode.disconnect(); } catch (e) {}
+          micSourceNode = null;
+        }
         const selectedDeviceId = document.getElementById('micDeviceSelect').value;
         const antiHowl = document.getElementById('antiHowlCheck').checked;
 
+        // 啟動 Chrome CoreAudio 極低延遲快速通道 (Fast-Path: 關閉所有 WebRTC 緩衝與 goog* 音訊濾鏡)
         micStream = await navigator.mediaDevices.getUserMedia({
           audio: {
             deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
             echoCancellation: antiHowl,
-            noiseSuppression: true,
+            noiseSuppression: false,
             autoGainControl: false,
-            latency: 0.005
+            googEchoCancellation: antiHowl,
+            googAutoGainControl: false,
+            googNoiseSuppression: false,
+            googHighpassFilter: false,
+            latency: 0
           }
         });
 
-        await refreshMicDevices();
+        await refreshAudioDevices();
 
-        if (micSourceNode) {
-          try { micSourceNode.disconnect(); } catch (e) {}
+        if (audioCtx.state === 'suspended') {
+          await audioCtx.resume();
         }
 
+        const sinkId = document.getElementById('speakerDeviceSelect').value;
+        if (sinkId && typeof audioCtx.setSinkId === 'function') {
+          try { await audioCtx.setSinkId(sinkId); } catch (e) {}
+        }
+
+        // 將麥克風直接接入與 MTV 完全同一個 audioCtx，確保兩者 100% 同步輸出到同一個喇叭/耳機！
         micSourceNode = audioCtx.createMediaStreamSource(micStream);
+        micSourceNode.connect(micAnalyser);
+        micSourceNode.connect(micDryGain);
+        micSourceNode.connect(micConvolver);
 
-        // 1. 濾除 85Hz 以下噴麥與低頻轟鳴
-        const hpFilter = audioCtx.createBiquadFilter();
-        hpFilter.type = 'highpass';
-        hpFilter.frequency.value = 85;
-
-        // 2. KTV 人聲穿透力美化 EQ (+3.5dB @ 3.2kHz)
-        const presenceEq = audioCtx.createBiquadFilter();
-        presenceEq.type = 'peaking';
-        presenceEq.frequency.value = 3200;
-        presenceEq.Q.value = 1.0;
-        presenceEq.gain.value = 3.5;
-
-        // 3. 人聲動態壓縮器（防高音爆音、提升小聲細節）
-        const compressor = audioCtx.createDynamicsCompressor();
-        compressor.threshold.value = -20;
-        compressor.knee.value = 18;
-        compressor.ratio.value = 3.5;
-        compressor.attack.value = 0.003;
-        compressor.release.value = 0.15;
-
-        micSourceNode.connect(hpFilter);
-        hpFilter.connect(presenceEq);
-        presenceEq.connect(compressor);
-
-        compressor.connect(micAnalyser);
-        compressor.connect(micDryGain);
-        compressor.connect(audioCtx._ktvPreDelay);
+        // 顯示實際 CoreAudio 緩衝區延遲
+        setTimeout(() => {
+          if (audioCtx) {
+            const baseMs = ((audioCtx.baseLatency || 0) * 1000);
+            const outMs = ((audioCtx.outputLatency || 0) * 1000);
+            const totalBufMs = Math.round(baseMs + outMs) || Math.round(baseMs) || 3;
+            document.getElementById('latencyBadge').textContent = `⚡ 緩衝 ${totalBufMs} ms`;
+          }
+        }, 250);
 
         roomState.mic_enabled = true;
+        applyMicRouting();
+        applyAudioDSP();
         updateMicUI();
-        updateMicDSP();
-        startMicMeterLoop();
-        sendMicStateToServer('🎙️ 麥克風 KTV 迴音已開啟！直接對著麥克風開唱吧！');
+        sendMicStateToServer('⚡ 極速低延遲麥克風已開啟！');
       } catch (err) {
         alert('無法開啟麥克風，請確認 Chrome 已允許麥克風權限：' + err.message);
       }
+    }
+
+    function applyMicRouting() {
+      if (!audioCtx || !micMasterGain) return;
+      const isRawMode = document.getElementById('rawVoiceCheck').checked;
+      const reverbRow = document.getElementById('reverbRow');
+      reverbRow.style.opacity = isRawMode ? '0.35' : '1.0';
+
+      const micVol = (roomState.mic_volume ?? 100) / 100;
+      const active = !!(roomState.mic_enabled && micStream);
+      micMasterGain.gain.setTargetAtTime(active ? micVol : 0, audioCtx.currentTime, 0.01);
+      micDryGain.gain.setTargetAtTime(1.0, audioCtx.currentTime, 0.01);
+
+      if (isRawMode) {
+        micWetGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.01);
+      } else {
+        const rev = (roomState.reverb_level ?? 0) / 100;
+        micWetGain.gain.setTargetAtTime(rev, audioCtx.currentTime, 0.01);
+      }
+    }
+
+    function onRawModeToggle() {
+      const isRawMode = document.getElementById('rawVoiceCheck').checked;
+      if (!isRawMode && (roomState.reverb_level ?? 0) === 0) {
+        roomState.reverb_level = 35;
+        document.getElementById('reverbSlider').value = 35;
+        document.getElementById('reverbLabel').textContent = '35%';
+      }
+      applyMicRouting();
+      showCenterToast(isRawMode ? '🎧 已切換為：100% 純原音極速直通' : '✨ 已切換為：KTV 迴音混響模式');
     }
 
     function stopMicrophone(notify = true) {
@@ -643,12 +753,10 @@
         try { micSourceNode.disconnect(); } catch (e) {}
         micSourceNode = null;
       }
-      if (meterAnimId) {
-        cancelAnimationFrame(meterAnimId);
-        meterAnimId = null;
-      }
       document.getElementById('micMeterFill').style.width = '0%';
+      document.getElementById('latencyBadge').textContent = '⚡ -- ms';
       roomState.mic_enabled = false;
+      applyMicRouting();
       updateMicUI();
       if (notify) {
         sendMicStateToServer('🔇 麥克風已關閉');
@@ -682,9 +790,12 @@
       roomState.mic_volume = parseInt(document.getElementById('micVolSlider').value, 10);
       roomState.reverb_level = parseInt(document.getElementById('reverbSlider').value, 10);
       roomState.volume = parseInt(document.getElementById('musicVolSlider').value, 10);
+      if (roomState.reverb_level > 0 && document.getElementById('rawVoiceCheck').checked) {
+        document.getElementById('rawVoiceCheck').checked = false;
+      }
       updateMicUI();
       applyAudioDSP();
-      updateMicDSP();
+      applyMicRouting();
       sendMicStateToServer();
     }
 
@@ -703,52 +814,56 @@
       }
     }
 
-    function updateMicDSP() {
-      if (!audioCtx || !micMasterGain) return;
-      const micVol = (roomState.mic_volume ?? 100) / 100;
-      const rev = (roomState.reverb_level ?? 45) / 100;
-      micMasterGain.gain.setTargetAtTime(roomState.mic_enabled ? micVol : 0, audioCtx.currentTime, 0.03);
-      micDryGain.gain.setTargetAtTime(1.0, audioCtx.currentTime, 0.03);
-      micWetGain.gain.setTargetAtTime(rev * 1.4, audioCtx.currentTime, 0.03);
-    }
-
     function updateMicUI() {
       const btn = document.getElementById('micToggleBtn');
       if (roomState.mic_enabled && micStream) {
         btn.classList.add('active');
-        btn.textContent = '🎙️ 麥克風歡唱中 (點擊關閉)';
+        btn.textContent = '🎙️ 麥克風收音中 (點擊關閉)';
       } else {
         btn.classList.remove('active');
-        btn.textContent = '🎙️ 點此開啟麥克風歡唱';
+        btn.textContent = '🎙️ 點此開啟麥克風測試';
       }
       document.getElementById('micVolSlider').value = roomState.mic_volume ?? 100;
       document.getElementById('micVolLabel').textContent = `${roomState.mic_volume ?? 100}%`;
 
-      document.getElementById('reverbSlider').value = roomState.reverb_level ?? 45;
-      document.getElementById('reverbLabel').textContent = `${roomState.reverb_level ?? 45}%`;
+      document.getElementById('reverbSlider').value = roomState.reverb_level ?? 0;
+      document.getElementById('reverbLabel').textContent = `${roomState.reverb_level ?? 0}%`;
 
-      document.getElementById('musicVolSlider').value = roomState.volume ?? 85;
-      document.getElementById('musicVolLabel').textContent = `${roomState.volume ?? 85}%`;
+      document.getElementById('musicVolSlider').value = roomState.volume ?? 80;
+      document.getElementById('musicVolLabel').textContent = `${roomState.volume ?? 80}%`;
 
       document.getElementById('antiHowlCheck').checked = !!roomState.anti_howl;
     }
 
-    function startMicMeterLoop() {
-      if (!micAnalyser) return;
-      const dataArray = new Uint8Array(micAnalyser.frequencyBinCount);
-      const fillEl = document.getElementById('micMeterFill');
+    function startLevelMeterLoop() {
+      if (meterAnimId) return;
+      const micData = new Uint8Array(128);
+      const musData = new Uint8Array(128);
+      const micFill = document.getElementById('micMeterFill');
+      const musFill = document.getElementById('musicMeterFill');
 
-      function tick() {
-        if (!roomState.mic_enabled || !micStream) return;
-        micAnalyser.getByteTimeDomainData(dataArray);
+      function calcPct(analyser, buf, mult) {
+        if (!analyser) return 0;
+        analyser.getByteTimeDomainData(buf);
         let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-          const v = (dataArray[i] - 128) / 128;
+        for (let i = 0; i < buf.length; i++) {
+          const v = (buf[i] - 128) / 128;
           sum += v * v;
         }
-        const rms = Math.sqrt(sum / dataArray.length);
-        const pct = Math.min(100, Math.round(rms * 320));
-        fillEl.style.width = `${pct}%`;
+        return Math.min(100, Math.round(Math.sqrt(sum / buf.length) * mult));
+      }
+
+      function tick() {
+        if (roomState.mic_enabled && micStream && micAnalyser) {
+          micFill.style.width = `${calcPct(micAnalyser, micData, 260)}%`;
+        } else {
+          micFill.style.width = '0%';
+        }
+        if (musicAnalyser && activeEngine === 'dsp' && !videoEl.paused) {
+          musFill.style.width = `${calcPct(musicAnalyser, musData, 220)}%`;
+        } else {
+          musFill.style.width = '0%';
+        }
         meterAnimId = requestAnimationFrame(tick);
       }
       tick();
@@ -809,9 +924,9 @@
     }
 
     function applyAudioDSP() {
-      const musVol = (roomState.volume ?? 85) / 100;
+      const musVol = (roomState.volume ?? 80) / 100;
       if (activeEngine === 'iframe' && ytPlayer && ytPlayerReady && ytPlayer.setVolume) {
-        try { ytPlayer.setVolume(roomState.volume ?? 85); } catch (e) {}
+        try { ytPlayer.setVolume(roomState.volume ?? 80); } catch (e) {}
       }
       if (!audioCtx) return;
       if (audioUnlocked && audioCtx.state === 'suspended') audioCtx.resume();
@@ -825,6 +940,15 @@
 
       const semitones = roomState.pitch_semitones || 0;
       currentPitchRatio = Math.pow(2, semitones / 12);
+      if (directBypassGain && pitchShiftGain) {
+        if (semitones === 0) {
+          directBypassGain.gain.setTargetAtTime(1.0, audioCtx.currentTime, 0.03);
+          pitchShiftGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.03);
+        } else {
+          directBypassGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.03);
+          pitchShiftGain.gain.setTargetAtTime(1.0, audioCtx.currentTime, 0.03);
+        }
+      }
     }
 
     async function loadRoomInfo() {
@@ -881,13 +1005,14 @@
       videoEl.classList.remove('hidden');
       videoEl.src = `/api/stream/${videoId}`;
       videoEl.currentTime = startSeconds;
-      videoEl.muted = !audioUnlocked;
-      videoEl.play().catch(() => {
-        videoEl.muted = true;
+      // 重要：當 videoEl 已經由 WebAudio 接管時，絕對不能把 videoEl.muted 設為 true，否則 MediaElementSource 會輸出全靜音！
+      videoEl.muted = false;
+      videoEl.volume = 1.0;
+      if (audioCtx && audioCtx.state === 'suspended') {
         document.getElementById('unlockAudioBtn').classList.remove('hidden');
-        videoEl.play().catch(() => {
-          startIframePlayback(videoId, startSeconds);
-        });
+      }
+      videoEl.play().catch(() => {
+        document.getElementById('unlockAudioBtn').classList.remove('hidden');
       });
     }
 
@@ -907,7 +1032,7 @@
       ytPlayer.loadVideoById({ videoId: videoId, startSeconds: startSeconds });
       if (audioUnlocked) {
         ytPlayer.unMute();
-        ytPlayer.setVolume(roomState.volume ?? 85);
+        ytPlayer.setVolume(roomState.volume ?? 80);
       } else {
         ytPlayer.mute();
         document.getElementById('unlockAudioBtn').classList.remove('hidden');
@@ -976,15 +1101,14 @@
       document.getElementById('osdPitch').textContent =
         `🎼 ${p === 0 ? '原調 (0)' : (p > 0 ? '+' + p : p) + ' Key'}`;
 
-      // 同步遠端手機調音台數值
-      if (roomState.mic_enabled && !micStream) {
-        // 若使用者從手機按開啟且電視已獲得授權，嘗試自動開啟
+      // 只有在已經解鎖音訊手勢後，才允許遠端自動觸發開啟麥克風（避免網頁剛載入時在無手勢狀態下誤觸 unlockAudio 導致 AudioContext 卡在 suspended）
+      if (audioUnlocked && roomState.mic_enabled && !micStream) {
         startMicrophone();
       } else if (!roomState.mic_enabled && micStream) {
         stopMicrophone(false);
       }
       updateMicUI();
-      updateMicDSP();
+      applyMicRouting();
       applyAudioDSP();
       playSong(cur);
     }
@@ -1054,6 +1178,43 @@
       window._tvToast = setTimeout(() => { t.style.display = 'none'; }, 2200);
     }
 
+    function executeTogglePlay(forceState) {
+      if (!audioUnlocked) {
+        unlockAudio();
+      }
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      videoEl.muted = false;
+      if (activeEngine === 'dsp') {
+        if (videoEl.paused) {
+          videoEl.play();
+          showCenterToast('▶️ 繼續播放');
+        } else {
+          videoEl.pause();
+          showCenterToast('⏸️ 已暫停');
+        }
+      } else if (activeEngine === 'iframe' && ytPlayer && ytPlayerReady) {
+        ytPlayer.unMute();
+        const st = ytPlayer.getPlayerState ? ytPlayer.getPlayerState() : -1;
+        if (st === YT.PlayerState.PLAYING) {
+          ytPlayer.pauseVideo();
+          showCenterToast('⏸️ 已暫停');
+        } else {
+          ytPlayer.playVideo();
+          showCenterToast('▶️ 繼續播放');
+        }
+      }
+    }
+
+    function tvTogglePlay() {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ action: 'toggle_play' }));
+      } else {
+        executeTogglePlay();
+      }
+    }
+
     function connectWS() {
       const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
       ws = new WebSocket(`${proto}//${location.host}/ws`);
@@ -1070,11 +1231,7 @@
           }
         } else if (data.type === 'command') {
           if (data.command === 'toggle_play') {
-            if (activeEngine === 'dsp') {
-              data.is_playing ? videoEl.play() : videoEl.pause();
-            } else if (ytPlayer && ytPlayerReady) {
-              data.is_playing ? ytPlayer.playVideo() : ytPlayer.pauseVideo();
-            }
+            executeTogglePlay(data.is_playing);
           } else if (data.command === 'replay') {
             if (activeEngine === 'dsp') {
               videoEl.currentTime = 0;
@@ -1095,12 +1252,27 @@
       ws.onclose = () => setTimeout(connectWS, 1500);
     }
 
+    // 任何滑鼠點擊都會確保喚醒 AudioContext，徹底防止重新整理網頁後音效卡卡在 suspended 狀態
     document.body.addEventListener('click', () => {
-      if (!audioUnlocked) unlockAudio();
+      if (!audioUnlocked || (audioCtx && audioCtx.state !== 'running')) {
+        unlockAudio();
+      }
+    });
+
+    // 點擊影片畫面或按鍵盤「空白鍵 (Space)」即可直接暫停／繼續播放 MV
+    videoEl.addEventListener('click', () => {
+      tvTogglePlay();
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'SELECT') {
+        e.preventDefault();
+        tvTogglePlay();
+      }
     });
 
     loadRoomInfo();
-    refreshMicDevices();
+    refreshAudioDevices();
     connectWS();
   </script>
 </body>
