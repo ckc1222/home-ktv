@@ -348,8 +348,10 @@
   <!-- 解鎖自動播放聲音按鈕 -->
   <button id="unlockAudioBtn" onclick="unlockAudio()">🔊 點擊此處開啟電視聲音（首次開啟必點）</button>
 
-  <!-- HTML5 Video (支援 WebAudio 即時消人聲與升降 Key) -->
+  <!-- HTML5 Video (100% 原生硬體音效輸出) -->
   <video id="videoPlayer" playsinline class="hidden"></video>
+  <!-- AI 獨立人聲導唱音軌 (支援 0% 純伴奏 / 20% 微導唱 / 50% 半導唱 / 100% 原唱 零延遲無縫調整) -->
+  <audio id="guideVocalPlayer" preload="auto"></audio>
 
   <!-- 即時秒播 YouTube IFrame 播放器 -->
   <div id="ytIframeContainer" class="invisible">
@@ -443,11 +445,12 @@
   <script>
     let ws;
     let currentVideoId = null;
+    let currentPlayingStreamUrl = '';
     let roomState = {
       mic_enabled: false,
       mic_volume: 100,
       reverb_level: 0,
-      volume: 80,
+      volume: 85,
       anti_howl: false
     };
     let ytPlayer = null;
@@ -456,11 +459,10 @@
     let activeEngine = 'none';
     let audioUnlocked = false;
 
-    // 單一整合式 WebAudio 混音引擎（讓 MTV 伴奏與麥克風人聲強制走同一個 AudioContext 輸出，保證兩邊聲音永遠從同一個耳機/喇叭出來！）
+    // WebAudio 引擎：僅在「開啟麥克風」或「升降 Key != 0」時才介入，平時讓 <video> 走 Chrome 100% 原生硬體音效輸出，徹底杜絕 WebAudio 把 MV 靜音！
     let audioCtx = null;
     let sourceNode = null;
     let dryGain = null;
-    let vocalCutGain = null;
     let directBypassGain = null;
     let pitchShiftGain = null;
     window._globalPitchProcessor = null;
@@ -468,7 +470,7 @@
     let musicAnalyser = null;
     let currentPitchRatio = 1.0;
 
-    // 麥克風節點（共用同一個 audioCtx）
+    // 麥克風節點
     let micStream = null;
     let micSourceNode = null;
     let micDryGain = null;
@@ -479,29 +481,53 @@
     let meterAnimId = null;
 
     const videoEl = document.getElementById('videoPlayer');
+    const guideVocalEl = document.getElementById('guideVocalPlayer');
+    let currentVocalUrl = '';
+
+    // 讓獨立人聲導唱音軌與 MV 影片保持毫秒級同步
+    videoEl.addEventListener('play', () => {
+      if (currentPlayingStreamUrl.includes('/api/stream_inst/') && currentVocalUrl) {
+        if (Math.abs(guideVocalEl.currentTime - videoEl.currentTime) > 0.08) {
+          guideVocalEl.currentTime = videoEl.currentTime;
+        }
+        guideVocalEl.play().catch(() => {});
+      }
+    });
+    videoEl.addEventListener('pause', () => {
+      guideVocalEl.pause();
+    });
+    videoEl.addEventListener('seeked', () => {
+      if (currentPlayingStreamUrl.includes('/api/stream_inst/') && currentVocalUrl) {
+        guideVocalEl.currentTime = videoEl.currentTime;
+      }
+    });
+    videoEl.addEventListener('timeupdate', () => {
+      if (!videoEl.paused && currentPlayingStreamUrl.includes('/api/stream_inst/') && currentVocalUrl) {
+        if (guideVocalEl.paused && (roomState.vocal_level ?? 100) > 0) {
+          guideVocalEl.currentTime = videoEl.currentTime;
+          guideVocalEl.play().catch(() => {});
+        } else if (Math.abs(guideVocalEl.currentTime - videoEl.currentTime) > 0.12) {
+          guideVocalEl.currentTime = videoEl.currentTime;
+        }
+      }
+    });
 
     function unlockAudio() {
-      initWebAudio();
-      if (audioCtx) {
-        audioCtx.resume().then(() => {
-          if (audioCtx.state === 'running') {
-            audioUnlocked = true;
-            document.getElementById('unlockAudioBtn').classList.add('hidden');
-          }
-        }).catch(() => {});
+      audioUnlocked = true;
+      document.getElementById('unlockAudioBtn').classList.add('hidden');
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume().catch(() => {});
       }
       videoEl.muted = false;
-      videoEl.volume = 1.0;
+      videoEl.volume = (roomState.volume ?? 85) / 100;
       applyAudioDSP();
-      if (activeEngine === 'dsp' && videoEl.paused && currentVideoId && roomState.is_playing !== false) {
+      if (activeEngine === 'dsp' && videoEl.paused && currentVideoId) {
         videoEl.play().catch(() => {});
       }
       if (activeEngine === 'iframe' && ytPlayer && ytPlayerReady) {
         ytPlayer.unMute();
         ytPlayer.setVolume(roomState.volume ?? 85);
-        if (roomState.is_playing !== false) {
-          ytPlayer.playVideo();
-        }
+        ytPlayer.playVideo();
       }
     }
 
@@ -519,43 +545,41 @@
       return impulse;
     }
 
-    function initWebAudio() {
-      if (audioCtx) return;
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      // 使用 latencyHint: 0 讓伴奏與麥克風共用同一個超低延遲硬體通道
-      audioCtx = new AudioContextClass({ latencyHint: 0 });
+    function ensureAudioCtx() {
+      if (!audioCtx) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContextClass({ latencyHint: 0 });
+
+        micDryGain = audioCtx.createGain();
+        micWetGain = audioCtx.createGain();
+        micMasterGain = audioCtx.createGain();
+        micAnalyser = audioCtx.createAnalyser();
+        micAnalyser.fftSize = 256;
+
+        micConvolver = audioCtx.createConvolver();
+        micConvolver.normalize = false;
+        micConvolver.buffer = createKtvReverbImpulse(audioCtx, 1.8, 2.5);
+        micConvolver.connect(micWetGain);
+
+        micDryGain.connect(micMasterGain);
+        micWetGain.connect(micMasterGain);
+        micMasterGain.connect(audioCtx.destination);
+
+        startLevelMeterLoop();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume().catch(() => {});
+      }
+    }
+
+    function attachVideoPitchWebAudioIfNeeded() {
+      // 只有當使用者按了「升降 Key (pitch_semitones != 0)」時，才把 videoEl 接進 WebAudio 移調器；平時保持 100% 原生 <video> 聲音輸出！
+      if (sourceNode) return;
+      ensureAudioCtx();
       sourceNode = audioCtx.createMediaElementSource(videoEl);
 
       dryGain = audioCtx.createGain();
       dryGain.gain.value = 1.0;
-
-      vocalCutGain = audioCtx.createGain();
-      vocalCutGain.gain.value = 0.0;
-
-      const splitter = audioCtx.createChannelSplitter(2);
-      const invertRight = audioCtx.createGain();
-      invertRight.gain.value = -1.0;
-
-      const diffMix = audioCtx.createGain();
-      diffMix.gain.value = 1.15;
-
-      const bassFilter = audioCtx.createBiquadFilter();
-      bassFilter.type = 'lowpass';
-      bassFilter.frequency.value = 140;
-      const bassGain = audioCtx.createGain();
-      bassGain.gain.value = 1.25;
-
-      sourceNode.connect(splitter);
-      splitter.connect(diffMix, 0);
-      splitter.connect(invertRight, 1);
-      invertRight.connect(diffMix);
-
-      sourceNode.connect(bassFilter);
-      bassFilter.connect(bassGain);
-
-      diffMix.connect(vocalCutGain);
-      bassGain.connect(vocalCutGain);
-
       sourceNode.connect(dryGain);
 
       directBypassGain = audioCtx.createGain();
@@ -566,40 +590,20 @@
 
       window._globalPitchProcessor = createPitchShifterNode(audioCtx);
       musicMasterGain = audioCtx.createGain();
-      musicMasterGain.gain.value = 0.85;
+      musicMasterGain.gain.value = (roomState.volume ?? 85) / 100;
 
       musicAnalyser = audioCtx.createAnalyser();
       musicAnalyser.fftSize = 256;
 
       dryGain.connect(directBypassGain);
-      vocalCutGain.connect(directBypassGain);
       directBypassGain.connect(musicMasterGain);
 
       dryGain.connect(window._globalPitchProcessor);
-      vocalCutGain.connect(window._globalPitchProcessor);
       window._globalPitchProcessor.connect(pitchShiftGain);
       pitchShiftGain.connect(musicMasterGain);
 
       musicMasterGain.connect(musicAnalyser);
       musicMasterGain.connect(audioCtx.destination);
-
-      // 同時在同一個 audioCtx 建立麥克風混音匯流排
-      micDryGain = audioCtx.createGain();
-      micWetGain = audioCtx.createGain();
-      micMasterGain = audioCtx.createGain();
-      micAnalyser = audioCtx.createAnalyser();
-      micAnalyser.fftSize = 256;
-
-      micConvolver = audioCtx.createConvolver();
-      micConvolver.normalize = false;
-      micConvolver.buffer = createKtvReverbImpulse(audioCtx, 1.8, 2.5);
-      micConvolver.connect(micWetGain);
-
-      micDryGain.connect(micMasterGain);
-      micWetGain.connect(micMasterGain);
-      micMasterGain.connect(audioCtx.destination);
-
-      startLevelMeterLoop();
     }
 
     async function refreshAudioDevices() {
@@ -638,6 +642,9 @@
         if (typeof videoEl.setSinkId === 'function') {
           await videoEl.setSinkId(sinkId);
         }
+        if (typeof guideVocalEl.setSinkId === 'function') {
+          await guideVocalEl.setSinkId(sinkId);
+        }
         if (audioCtx && typeof audioCtx.setSinkId === 'function') {
           await audioCtx.setSinkId(sinkId);
         }
@@ -649,7 +656,7 @@
 
     async function startMicrophone() {
       unlockAudio();
-      initWebAudio();
+      ensureAudioCtx();
 
       try {
         if (micStream) {
@@ -924,21 +931,47 @@
     }
 
     function applyAudioDSP() {
-      const musVol = (roomState.volume ?? 80) / 100;
-      if (activeEngine === 'iframe' && ytPlayer && ytPlayerReady && ytPlayer.setVolume) {
-        try { ytPlayer.setVolume(roomState.volume ?? 80); } catch (e) {}
-      }
-      if (!audioCtx) return;
-      if (audioUnlocked && audioCtx.state === 'suspended') audioCtx.resume();
+      const musVol = (roomState.volume ?? 85) / 100;
+      const vocalPct = (roomState.vocal_level ?? 100) / 100;
 
-      const cut = !!roomState.vocal_cut;
-      dryGain.gain.setTargetAtTime(cut ? 0.0 : 1.0, audioCtx.currentTime, 0.05);
-      vocalCutGain.gain.setTargetAtTime(cut ? 1.0 : 0.0, audioCtx.currentTime, 0.05);
+      // 控制 AI 獨立人聲導唱音軌音量 (0% / 20% / 50% / 100%)
+      if (currentPlayingStreamUrl.includes('/api/stream_inst/')) {
+        guideVocalEl.muted = false;
+        guideVocalEl.volume = Math.max(0, Math.min(1, musVol * vocalPct));
+        if (vocalPct === 0 && !guideVocalEl.paused) {
+          guideVocalEl.pause();
+        } else if (vocalPct > 0 && !videoEl.paused && guideVocalEl.paused && currentVocalUrl) {
+          guideVocalEl.currentTime = videoEl.currentTime;
+          guideVocalEl.play().catch(() => {});
+        }
+      } else {
+        guideVocalEl.volume = 0;
+        if (!guideVocalEl.paused) guideVocalEl.pause();
+      }
+
+      if (activeEngine === 'iframe' && ytPlayer && ytPlayerReady && ytPlayer.setVolume) {
+        try { ytPlayer.setVolume(roomState.volume ?? 85); } catch (e) {}
+      }
+
+      const semitones = roomState.pitch_semitones || 0;
+      if (semitones !== 0 && !sourceNode) {
+        attachVideoPitchWebAudioIfNeeded();
+      }
+
+      if (!sourceNode) {
+        // 原生 <video> 直出模式：直接用 videoEl.volume 控制音量，100% 不會被 WebAudio 靜音！
+        videoEl.volume = musVol;
+        return;
+      }
+
+      videoEl.volume = 1.0;
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+
+      dryGain.gain.setTargetAtTime(1.0, audioCtx.currentTime, 0.03);
       if (musicMasterGain) {
         musicMasterGain.gain.setTargetAtTime(musVol, audioCtx.currentTime, 0.05);
       }
 
-      const semitones = roomState.pitch_semitones || 0;
       currentPitchRatio = Math.pow(2, semitones / 12);
       if (directBypassGain && pitchShiftGain) {
         if (semitones === 0) {
@@ -990,35 +1023,61 @@
       });
     }
 
-    function startDspPlayback(videoId, startSeconds = 0) {
+    function startDspPlayback(videoId, startSeconds = 0, useAiInst = false) {
       activeEngine = 'dsp';
-      document.getElementById('osdEngine').textContent = '🎛️ 無廣告伴奏引擎 (支援消人聲/升降Key)';
+      const targetUrl = useAiInst ? `/api/stream_inst/${videoId}` : `/api/stream/${videoId}`;
+      const targetVocalUrl = useAiInst ? `/api/stream_vocal/${videoId}` : '';
+
+      document.getElementById('osdEngine').textContent = useAiInst
+        ? '🤖 AI 雙軌導唱引擎 (伴奏 100% + 人聲可自由調 0%~100%)'
+        : '🎛️ 無廣告原音引擎 (可隨時開啟 AI 導唱/消人聲)';
 
       document.getElementById('ytIframeContainer').classList.add('invisible');
       if (ytPlayer && ytPlayerReady && ytPlayer.stopVideo) {
         try { ytPlayer.stopVideo(); } catch (e) {}
       }
 
-      initWebAudio();
-      applyAudioDSP();
-
       videoEl.classList.remove('hidden');
-      videoEl.src = `/api/stream/${videoId}`;
-      videoEl.currentTime = startSeconds;
-      // 重要：當 videoEl 已經由 WebAudio 接管時，絕對不能把 videoEl.muted 設為 true，否則 MediaElementSource 會輸出全靜音！
-      videoEl.muted = false;
-      videoEl.volume = 1.0;
-      if (audioCtx && audioCtx.state === 'suspended') {
-        document.getElementById('unlockAudioBtn').classList.remove('hidden');
+      if (currentPlayingStreamUrl !== targetUrl) {
+        currentPlayingStreamUrl = targetUrl;
+        currentVocalUrl = targetVocalUrl;
+        videoEl.src = targetUrl;
+        videoEl.muted = false;
+        if (targetVocalUrl) {
+          guideVocalEl.src = targetVocalUrl;
+        } else {
+          guideVocalEl.pause();
+          guideVocalEl.removeAttribute('src');
+        }
+        if (startSeconds > 0.5) {
+          videoEl.addEventListener('loadedmetadata', function onMeta() {
+            videoEl.removeEventListener('loadedmetadata', onMeta);
+            try {
+              videoEl.currentTime = startSeconds;
+              if (targetVocalUrl) guideVocalEl.currentTime = startSeconds;
+            } catch (e) {}
+          });
+        }
+        videoEl.play().then(() => {
+          audioUnlocked = true;
+          document.getElementById('unlockAudioBtn').classList.add('hidden');
+          if (targetVocalUrl && (roomState.vocal_level ?? 100) > 0) {
+            guideVocalEl.currentTime = videoEl.currentTime;
+            guideVocalEl.play().catch(() => {});
+          }
+        }).catch(() => {
+          document.getElementById('unlockAudioBtn').classList.remove('hidden');
+        });
       }
-      videoEl.play().catch(() => {
-        document.getElementById('unlockAudioBtn').classList.remove('hidden');
-      });
+      applyAudioDSP();
     }
 
     function startIframePlayback(videoId, startSeconds = 0) {
       activeEngine = 'iframe';
-      document.getElementById('osdEngine').textContent = '⚡ YouTube 秒播中 (背景準備伴奏音軌...)';
+      currentPlayingStreamUrl = '';
+      currentVocalUrl = '';
+      guideVocalEl.pause();
+      document.getElementById('osdEngine').textContent = '⚡ YouTube 秒播中 (背景準備高音質音軌...)';
 
       videoEl.pause();
       videoEl.classList.add('hidden');
@@ -1032,7 +1091,7 @@
       ytPlayer.loadVideoById({ videoId: videoId, startSeconds: startSeconds });
       if (audioUnlocked) {
         ytPlayer.unMute();
-        ytPlayer.setVolume(roomState.volume ?? 80);
+        ytPlayer.setVolume(roomState.volume ?? 85);
       } else {
         ytPlayer.mute();
         document.getElementById('unlockAudioBtn').classList.remove('hidden');
@@ -1043,8 +1102,11 @@
     function playSong(song) {
       if (!song || !song.video_id) {
         currentVideoId = null;
+        currentPlayingStreamUrl = '';
+        currentVocalUrl = '';
         activeEngine = 'none';
         videoEl.pause();
+        guideVocalEl.pause();
         videoEl.classList.add('hidden');
         document.getElementById('ytIframeContainer').classList.add('invisible');
         if (ytPlayer && ytPlayerReady && ytPlayer.stopVideo) {
@@ -1055,6 +1117,8 @@
       }
 
       document.getElementById('idleScreen').classList.add('hidden');
+      // 只要該首歌曲已經完成 AI 分離 (song.ai_cached)，一律載入 AI 雙軌模式（純伴奏影片 + 獨立人聲導唱音軌），這樣在 100% / 50% / 20% / 0% 之間切換完全零延遲、影片不重載！
+      const wantAiInst = !!song.ai_cached;
 
       if (song.video_id === currentVideoId) {
         if (song.cached && activeEngine === 'iframe') {
@@ -1064,14 +1128,22 @@
               curSec = ytPlayer.getCurrentTime() || 0;
             }
           } catch (e) {}
-          startDspPlayback(song.video_id, curSec);
+          startDspPlayback(song.video_id, curSec, wantAiInst);
+        } else if (activeEngine === 'dsp') {
+          const targetUrl = wantAiInst ? `/api/stream_inst/${song.video_id}` : `/api/stream/${song.video_id}`;
+          if (currentPlayingStreamUrl !== targetUrl) {
+            const curSec = videoEl.currentTime || 0;
+            startDspPlayback(song.video_id, curSec, wantAiInst);
+          }
         }
         return;
       }
 
       currentVideoId = song.video_id;
+      currentPlayingStreamUrl = '';
+      currentVocalUrl = '';
       if (song.cached) {
-        startDspPlayback(song.video_id, 0);
+        startDspPlayback(song.video_id, 0, wantAiInst);
       } else {
         startIframePlayback(song.video_id, 0);
       }
@@ -1093,9 +1165,16 @@
         ? `下一首：${next.title.slice(0, 26)} (共 ${roomState.queue.length} 首待播)`
         : '下一首：尚無待播歌曲';
 
-      document.getElementById('osdVocal').textContent = roomState.vocal_cut
-        ? '🎤 伴唱模式 (消人聲)'
-        : '🎵 原唱模式';
+      const vLevel = roomState.vocal_level ?? 100;
+      if (cur && cur.ai_processing) {
+        document.getElementById('osdVocal').textContent = '🤖 AI 分離人聲中...';
+      } else if (vLevel === 0) {
+        document.getElementById('osdVocal').textContent = '🤖 0% 純伴奏 (點此切原唱)';
+      } else if (vLevel < 100) {
+        document.getElementById('osdVocal').textContent = `🎤 ${vLevel}% 人聲導唱 (點此切換)`;
+      } else {
+        document.getElementById('osdVocal').textContent = '🎵 100% 原唱 (點此切 50%/20%/0%)';
+      }
 
       const p = roomState.pitch_semitones || 0;
       document.getElementById('osdPitch').textContent =
@@ -1227,7 +1306,13 @@
           if (roomState.current_song && roomState.current_song.video_id === data.video_id) {
             roomState.current_song.cached = true;
             playSong(roomState.current_song);
-            showCenterToast('🎛️ 伴奏音軌準備完成！已開啟「消人聲」與「升降Key」功能');
+            showCenterToast('🎛️ 高音質音軌準備完成！可隨時按「AI 消人聲」或「升降Key」');
+          }
+        } else if (data.type === 'ai_inst_ready') {
+          if (roomState.current_song && roomState.current_song.video_id === data.video_id) {
+            roomState.current_song.ai_cached = true;
+            roomState.current_song.ai_processing = false;
+            updateOSD();
           }
         } else if (data.type === 'command') {
           if (data.command === 'toggle_play') {
@@ -1259,9 +1344,14 @@
       }
     });
 
-    // 點擊影片畫面或按鍵盤「空白鍵 (Space)」即可直接暫停／繼續播放 MV
-    videoEl.addEventListener('click', () => {
-      tvTogglePlay();
+    // 點擊影片畫面：若目前暫停或未解鎖聲音，優先開始播放並開啟聲音
+    videoEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (videoEl.paused || !audioUnlocked) {
+        unlockAudio();
+      } else {
+        tvTogglePlay();
+      }
     });
 
     window.addEventListener('keydown', (e) => {

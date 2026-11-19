@@ -7,20 +7,16 @@ echo ====================================================
 echo 🎤 正在檢查 Windows 家庭 KTV 系統環境...
 echo ====================================================
 
-:: 1. 自動建立 Python 虛擬環境並安裝套件 (首次執行時)
+:: 1. 自動建立 Python 虛擬環境並安裝套件 (含 Meta Demucs AI 引擎)
 if not exist ".venv\Scripts\python.exe" (
-    echo 📦 首次啟動：正在建立 Python 虛擬環境...
-    python -m venv .venv
-    if errorlevel 1 (
-        echo ❌ 找不到 Python！請先從 https://www.python.org/downloads/ 安裝 Python 3.10+ 並勾選 "Add Python to PATH"。
-        pause
-        exit /b 1
-    )
-    call .venv\Scripts\activate.bat
-    python -m pip install --upgrade pip
-    pip install -r requirements.txt
+    call install_demucs.bat
 ) else (
     call .venv\Scripts\activate.bat
+    python -c "import demucs, imageio_ffmpeg, soundfile" >nul 2>&1
+    if errorlevel 1 (
+        echo 🤖 偵測到尚未安裝 Meta Demucs AI 引擎，正在自動安裝...
+        call install_demucs.bat
+    )
 )
 
 :: 2. 自動下載最新版 Windows yt-dlp.exe 與 deno.exe 解密引擎 (首次執行時)
@@ -45,7 +41,7 @@ for /f "delims=" %%i in ('python -c "import socket; s=socket.socket(socket.AF_IN
 if "%LOCAL_IP%"=="" set LOCAL_IP=127.0.0.1
 
 echo ====================================================
-echo 🎤 家庭 KTV 歡唱伺服器已啟動 ^(Windows 防休眠模式^)
+echo 🎤 家庭 KTV 歡唱伺服器已啟動 ^(Windows 防休眠模式 + Demucs AI 引擎^)
 echo 📱 iPad / iPhone 點歌台網址: http://%LOCAL_IP%:8000/
 echo 📺 電視播放端 ^(Chrome^) 網址: http://%LOCAL_IP%:8000/tv
 echo ====================================================

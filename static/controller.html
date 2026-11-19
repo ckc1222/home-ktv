@@ -356,6 +356,16 @@
       </div>
 
       <div class="pitch-row">
+        <span class="pitch-label" id="vocalLevelDisplay">🎤 AI 人聲導唱：100% 原唱</span>
+        <div class="pitch-controls">
+          <button class="pitch-btn" id="vBtn100" onclick="sendAction({action:'set_vocal_level', level:100})">100% 原唱</button>
+          <button class="pitch-btn" id="vBtn50" onclick="sendAction({action:'set_vocal_level', level:50})">50% 導唱</button>
+          <button class="pitch-btn" id="vBtn20" onclick="sendAction({action:'set_vocal_level', level:20})">20% 導唱</button>
+          <button class="pitch-btn" id="vBtn0" onclick="sendAction({action:'set_vocal_level', level:0})">0% 純伴奏</button>
+        </div>
+      </div>
+
+      <div class="pitch-row">
         <span class="pitch-label" id="pitchDisplay">🎼 升降調：原調 (0)</span>
         <div class="pitch-controls">
           <button class="pitch-btn" onclick="sendAction({action:'set_pitch', delta:-1})">♭ 降 Key (-1)</button>
@@ -493,13 +503,34 @@
       document.getElementById('tabQueueNum').textContent = qLen;
 
       const btnVocal = document.getElementById('btnVocal');
-      if (roomState.vocal_cut) {
+      const cur = roomState.current_song;
+      const vLevel = roomState.vocal_level ?? 100;
+      if (cur && cur.ai_processing) {
         btnVocal.classList.add('active');
-        btnVocal.textContent = '🎤 伴唱中(消人聲)';
+        btnVocal.textContent = '🤖 AI 分離中...';
+      } else if (vLevel === 0) {
+        btnVocal.classList.add('active');
+        btnVocal.textContent = '🤖 0% 純伴奏';
+      } else if (vLevel < 100) {
+        btnVocal.classList.add('active');
+        btnVocal.textContent = `🎤 ${vLevel}% 導唱中`;
       } else {
         btnVocal.classList.remove('active');
-        btnVocal.textContent = '🎵 原唱模式';
+        btnVocal.textContent = '🎵 100% 原唱';
       }
+
+      document.getElementById('vocalLevelDisplay').textContent =
+        cur && cur.ai_processing
+          ? '🤖 AI 正在分離人聲與伴奏...'
+          : `🎤 AI 人聲導唱：${vLevel === 100 ? '100% 原唱' : vLevel === 0 ? '0% 純伴奏' : vLevel + '% 導唱'}`;
+
+      [100, 50, 20, 0].forEach((lv) => {
+        const el = document.getElementById('vBtn' + lv);
+        if (el) {
+          el.style.background = vLevel === lv ? 'var(--accent)' : 'rgba(255,255,255,0.07)';
+          el.style.borderColor = vLevel === lv ? 'var(--accent)' : 'var(--border)';
+        }
+      });
 
       const p = roomState.pitch_semitones || 0;
       document.getElementById('pitchDisplay').textContent =
