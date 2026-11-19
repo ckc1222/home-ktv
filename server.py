@@ -18,8 +18,17 @@ BIN_DIR = BASE_DIR / "bin"
 CACHE_DIR = BASE_DIR / "cache"
 CACHE_DIR.mkdir(exist_ok=True)
 
-# 將獨立版 yt-dlp 與 deno 加入環境變數 PATH
-os.environ["PATH"] = f"{BIN_DIR}:{os.environ.get('PATH', '')}"
+# 將獨立版 yt-dlp 與 deno 加入環境變數 PATH (相容 macOS ':' 與 Windows ';')
+os.environ["PATH"] = f"{BIN_DIR}{os.pathsep}{os.environ.get('PATH', '')}"
+
+# Windows 防休眠模式 (等同 macOS caffeinate)
+if os.name == "nt":
+    try:
+        import ctypes
+        # ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED
+        ctypes.windll.kernel32.SetThreadExecutionState(0x80000003)
+    except Exception:
+        pass
 
 app = FastAPI(title="Home KTV Party Server")
 
@@ -113,7 +122,8 @@ def download_video_sync(video_id: str) -> bool:
         return True
 
     temp_target = CACHE_DIR / f"{video_id}.temp.mp4"
-    yt_dlp_bin = str(BIN_DIR / "yt-dlp") if (BIN_DIR / "yt-dlp").exists() else "yt-dlp"
+    yt_dlp_name = "yt-dlp.exe" if os.name == "nt" else "yt-dlp"
+    yt_dlp_bin = str(BIN_DIR / yt_dlp_name) if (BIN_DIR / yt_dlp_name).exists() else "yt-dlp"
     cmd = [
         yt_dlp_bin,
         "--no-playlist",
